@@ -27,7 +27,6 @@ export default function ConversationListItem({
     setRenameValue(conversation.title);
     setRenaming(true);
     setMenuOpen(false);
-    setTimeout(() => inputRef.current?.select(), 0);
   }
 
   function commitRename() {
@@ -46,13 +45,18 @@ export default function ConversationListItem({
   const isArchived = conversation.status === 'archived';
 
   return (
-    <div
-      className={`${styles.item} ${active ? styles.active : ''}`}
-      onClick={() => {
-        if (!renaming) onSelect();
-      }}
-    >
-      <div className={styles.mainArea}>
+    <div className={`${styles.item} ${active ? styles.active : ''}`}>
+      <button
+        type="button"
+        className={styles.mainArea}
+        onClick={() => { if (!renaming) onSelect(); }}
+        onKeyDown={(e) => {
+          if (!renaming && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+      >
         {renaming ? (
           <input
             ref={inputRef}
@@ -60,6 +64,7 @@ export default function ConversationListItem({
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onClick={(e) => e.stopPropagation()}
+            onFocus={(e) => e.currentTarget.select()}
             onBlur={commitRename}
             onKeyDown={(e) => {
               e.stopPropagation();
@@ -72,7 +77,7 @@ export default function ConversationListItem({
           <span className={styles.title}>{conversation.title}</span>
         )}
         <RelativeTime iso={conversation.updatedAt} className={styles.time} />
-      </div>
+      </button>
 
       <button
         className={styles.menuBtn}

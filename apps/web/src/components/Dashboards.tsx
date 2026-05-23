@@ -20,7 +20,7 @@ import ErrorState from './states/ErrorState.js';
 import styles from './Dashboards.module.css';
 
 export default function Dashboards() {
-  const { data, status, error, setFilters, reload } = useMetrics();
+  const { data, status, error, filters, setFilters, reload } = useMetrics();
   const [preset, setPreset] = useState<RangePreset>('24h');
   const [provider, setProvider] = useState<string | undefined>(undefined);
   const [model, setModel] = useState<string | undefined>(undefined);
@@ -67,22 +67,22 @@ export default function Dashboards() {
           <div className={styles.grid}>
             <div className={styles.chartCard}>
               <p className={styles.chartTitle}>Latency (ms)</p>
-              <LatencyChart data={toLatencyRows(data.latency)} />
+              <LatencyChart data={toLatencyRows(data.latency, filters.bucket)} />
             </div>
 
             <div className={styles.chartCard}>
               <p className={styles.chartTitle}>Throughput</p>
-              <ThroughputChart data={toThroughputRows(data.throughput)} />
+              <ThroughputChart data={toThroughputRows(data.throughput, filters.bucket)} />
             </div>
 
             <div className={styles.chartCard}>
               <p className={styles.chartTitle}>Error Rate</p>
-              <ErrorRateChart data={toErrorRows(data.errors)} />
+              <ErrorRateChart data={toErrorRows(data.errors, filters.bucket)} />
             </div>
 
             <div className={styles.chartCard}>
               <p className={styles.chartTitle}>Token Usage</p>
-              <TokenUsageChart data={toTokenRows(data.tokens)} />
+              <TokenUsageChart data={toTokenRows(data.tokens, filters.bucket)} />
             </div>
           </div>
         </>

@@ -41,7 +41,7 @@ export default function AppShell({ user, onSignOut, children }: AppShellProps) {
         <div className={styles.userArea}>
           <UserAvatar user={user} />
           <span className={styles.userName}>{user.name ?? user.email}</span>
-          <button className={styles.signOutBtn} onClick={onSignOut}>
+          <button type="button" className={styles.signOutBtn} onClick={onSignOut}>
             Sign out
           </button>
         </div>

@@ -34,6 +34,8 @@ export function useGuestChat(): UseGuestChatResult {
   });
 
   const abortRef = useRef<AbortController | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // Hydrate from localStorage on mount if a saved state exists
   // (The initializer already handles this via useReducer's init function)
@@ -45,8 +47,8 @@ export function useGuestChat(): UseGuestChatResult {
 
   const send = useCallback(
     (content: string) => {
-      const id = `guest-${Date.now()}`;
-      const assistantId = `guest-a-${Date.now() + 1}`;
+      const id = crypto.randomUUID();
+      const assistantId = crypto.randomUUID();
       dispatch({ type: 'sendUser', content, id });
 
       const ac = new AbortController();
@@ -54,7 +56,7 @@ export function useGuestChat(): UseGuestChatResult {
 
       // Build the message history for context (include the user message we just added)
       const allMessages = [
-        ...state.conversation.messages,
+        ...stateRef.current.conversation.messages,
         { role: 'user' as const, content },
       ];
 
@@ -93,8 +95,11 @@ export function useGuestChat(): UseGuestChatResult {
         dispatch({ type: 'streamError', code: 'provider_error', message: msg });
       });
     },
-    [state.conversation.messages, refresh],
+    [refresh],
   );
+
+  // Abort in-flight stream on unmount
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

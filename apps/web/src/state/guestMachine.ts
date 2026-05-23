@@ -181,7 +181,11 @@ export function loadGuestState(): GuestState | undefined {
 }
 
 export function saveGuestState(state: GuestState): void {
-  localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Swallow quota/serialization errors — a storage failure must not crash the caller
+  }
 }
 
 export function clearGuestState(): void {

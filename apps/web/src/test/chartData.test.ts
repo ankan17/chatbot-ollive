@@ -38,6 +38,23 @@ describe('toLatencyRows', () => {
     ]);
     expect((rows[0] as unknown as Record<string, unknown>)['count']).toBeUndefined();
   });
+
+  it('1d bucket yields a date-style label, not HH:mm', () => {
+    const rows = toLatencyRows(
+      [{ t: '2026-05-23T10:00:00.000Z', p50: 100, p95: 200, p99: 300, count: 5 }],
+      '1d',
+    );
+    expect(rows[0].label).not.toMatch(/^\d{2}:\d{2}$/);
+    expect(rows[0].label).toMatch(/[A-Z][a-z]+\s+\d+/);
+  });
+
+  it('intraday bucket (1m) yields HH:mm label', () => {
+    const rows = toLatencyRows(
+      [{ t: '2026-05-23T10:00:00.000Z', p50: 100, p95: 200, p99: 300, count: 5 }],
+      '1m',
+    );
+    expect(rows[0].label).toMatch(/^\d{2}:\d{2}$/);
+  });
 });
 
 // ─── toThroughputRows ─────────────────────────────────────────────────────────
@@ -54,6 +71,12 @@ describe('toThroughputRows', () => {
 
   it('empty series returns []', () => {
     expect(toThroughputRows([])).toEqual([]);
+  });
+
+  it('1d bucket yields a date-style label', () => {
+    const rows = toThroughputRows([{ t: '2026-05-23T10:00:00.000Z', count: 5 }], '1d');
+    expect(rows[0].label).not.toMatch(/^\d{2}:\d{2}$/);
+    expect(rows[0].label).toMatch(/[A-Z][a-z]+\s+\d+/);
   });
 });
 

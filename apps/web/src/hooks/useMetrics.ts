@@ -46,7 +46,7 @@ export function useMetrics(): UseMetricsResult {
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
-  const fetch = useCallback(async (f: MetricFilters): Promise<void> => {
+  const loadMetrics = useCallback(async (f: MetricFilters): Promise<void> => {
     acRef.current?.abort();
     const ac = new AbortController();
     acRef.current = ac;
@@ -83,19 +83,19 @@ export function useMetrics(): UseMetricsResult {
 
   // Re-fetch when filters change
   useEffect(() => {
-    void fetch(filters);
+    void loadMetrics(filters);
     return () => {
       acRef.current?.abort();
     };
-  }, [filters, fetch]);
+  }, [filters, loadMetrics]);
 
   const setFilters = useCallback((partial: Partial<MetricFilters>) => {
     setFiltersState((prev) => ({ ...prev, ...partial }));
   }, []);
 
   const reload = useCallback((): Promise<void> => {
-    return fetch(filtersRef.current);
-  }, [fetch]);
+    return loadMetrics(filtersRef.current);
+  }, [loadMetrics]);
 
   return { data, status, error, filters, setFilters, reload };
 }

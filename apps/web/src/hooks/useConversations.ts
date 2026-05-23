@@ -4,7 +4,6 @@ import {
   listConversations,
   createConversation,
   patchConversation,
-  getConversation,
 } from '../api/conversations.js';
 import type { Conversation } from '../api/types.js';
 import type { ApiError } from '../api/errors.js';
@@ -19,7 +18,7 @@ export interface UseConversationsResult {
   create(): Promise<Conversation>;
   rename(id: string, title: string): Promise<void>;
   archive(id: string, archived: boolean): Promise<void>;
-  refreshOne(id: string): Promise<void>;
+  refreshOne(): Promise<void>;
 }
 
 export function useConversations(): UseConversationsResult {
@@ -50,13 +49,8 @@ export function useConversations(): UseConversationsResult {
     await run();
   }, [run]);
 
-  const refreshOne = useCallback(async (id: string): Promise<void> => {
-    const updated = await getConversation(id);
-    // We don't have a setter for partial updates, so just reload the whole list
-    // This is fine for MVP — the list is short
-    void run();
-    // Suppress the unused variable; the reload is what matters
-    void updated;
+  const refreshOne = useCallback((): Promise<void> => {
+    return run();
   }, [run]);
 
   return {

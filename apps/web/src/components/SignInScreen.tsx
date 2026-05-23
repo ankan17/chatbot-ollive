@@ -4,10 +4,9 @@ import styles from './SignInScreen.module.css';
 
 export interface SignInScreenProps {
   onSignIn(): void;
-  devMode?: boolean;
 }
 
-export default function SignInScreen({ onSignIn, devMode }: SignInScreenProps) {
+export default function SignInScreen({ onSignIn }: SignInScreenProps) {
   function handleSignIn() {
     window.location.assign(googleSignInUrl());
     onSignIn();
@@ -21,9 +20,6 @@ export default function SignInScreen({ onSignIn, devMode }: SignInScreenProps) {
         <button className={styles.button} onClick={handleSignIn}>
           Sign in with Google
         </button>
-        {devMode && (
-          <p className={styles.devNote}>Dev mode: authentication is mocked.</p>
-        )}
       </div>
     </div>
   );

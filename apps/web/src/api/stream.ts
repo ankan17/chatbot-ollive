@@ -134,7 +134,9 @@ export async function streamChat(
     throw normalizeError(res.status, parsedBody);
   }
 
-  const reader = res.body!.getReader();
+  if (!res.body) throw new ApiError('network_error', 0, 'No response body');
+
+  const reader = res.body.getReader();
   const decoder = new TextDecoder();
   const parser = createSseParser();
 
@@ -158,6 +160,9 @@ export async function streamChat(
       }
 
       if (result.done) {
+        // Drain any buffered multibyte bytes from the decoder
+        const tail = decoder.decode();
+        if (tail) parser.push(tail);
         // Stream ended — flush any trailing frame
         const trailing = parser.flush();
         for (const event of trailing) {
@@ -188,5 +193,7 @@ export async function streamChat(
       0,
       err instanceof Error ? err.message : 'Stream error',
     );
+  } finally {
+    try { reader.releaseLock(); } catch { /* already released */ }
   }
 }

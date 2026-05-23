@@ -40,6 +40,9 @@ export function normalizeError(status: number, body: unknown): ApiError {
     const remaining = typeof b.remaining === 'number' ? b.remaining : undefined;
     return new ApiError('login_required', status, msg, undefined, remaining);
   }
+  if (status === 403) {
+    return new ApiError('unauthorized', status, msg);
+  }
   if (status === 404) {
     return new ApiError('not_found', status, msg);
   }

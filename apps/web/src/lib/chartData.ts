@@ -60,6 +60,7 @@ export function formatTick(iso: string, bucket: MetricsBucket): string {
  * Examples: 856000 → "856K", 1840 → "1.8K", 1000000 → "1M", 1500000 → "1.5M"
  */
 export function formatTokens(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '—';
   if (n >= 1_000_000) {
     const v = n / 1_000_000;
     return v % 1 === 0 ? `${v}M` : `${parseFloat(v.toFixed(1))}M`;
@@ -76,6 +77,7 @@ export function formatTokens(n: number): string {
  * 0.021 → "2.1%", 0 → "0%"
  */
 export function formatPercent(rate: number): string {
+  if (!Number.isFinite(rate) || rate < 0) return '—';
   const pct = rate * 100;
   if (pct === 0) return '0%';
   // Strip trailing zeros
@@ -84,36 +86,36 @@ export function formatPercent(rate: number): string {
 
 // ─── Row mappers ──────────────────────────────────────────────────────────────
 
-export function toLatencyRows(series: LatencyPoint[]): LatencyRow[] {
+export function toLatencyRows(series: LatencyPoint[], bucket: MetricsBucket = '1m'): LatencyRow[] {
   return series.map((pt) => ({
     t: pt.t,
-    label: formatTick(pt.t, '1m'), // label is formatted time; callers can re-format with bucket
+    label: formatTick(pt.t, bucket),
     p50: pt.p50,
     p95: pt.p95,
     p99: pt.p99,
   }));
 }
 
-export function toThroughputRows(series: ThroughputPoint[]): ThroughputRow[] {
+export function toThroughputRows(series: ThroughputPoint[], bucket: MetricsBucket = '1m'): ThroughputRow[] {
   return series.map((pt) => ({
     t: pt.t,
-    label: formatTick(pt.t, '1m'),
+    label: formatTick(pt.t, bucket),
     count: pt.count,
   }));
 }
 
-export function toErrorRows(series: ErrorPoint[]): ErrorRow[] {
+export function toErrorRows(series: ErrorPoint[], bucket: MetricsBucket = '1m'): ErrorRow[] {
   return series.map((pt) => ({
     t: pt.t,
-    label: formatTick(pt.t, '1m'),
+    label: formatTick(pt.t, bucket),
     errorRatePct: pt.errorRate * 100,
   }));
 }
 
-export function toTokenRows(series: TokenPoint[]): TokenRow[] {
+export function toTokenRows(series: TokenPoint[], bucket: MetricsBucket = '1m'): TokenRow[] {
   return series.map((pt) => ({
     t: pt.t,
-    label: formatTick(pt.t, '1m'),
+    label: formatTick(pt.t, bucket),
     prompt: pt.promptTokens,
     completion: pt.completionTokens,
     total: pt.totalTokens,

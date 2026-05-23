@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { chatReducer, initialChatState } from '../state/chatReducer.js';
 import { streamChat } from '../api/stream.js';
 import { buildUrl } from '../api/config.js';
@@ -67,6 +67,9 @@ export function useChat(
     },
     [conversationId, onFirstDone],
   );
+
+  // Abort in-flight stream on unmount
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

@@ -39,7 +39,10 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
   useEffect(() => {
     if (convData && !resetDone.current) {
       resetDone.current = true;
-      reset(convData.messages);
+      // Only reset when there are messages — never clobber an in-progress fresh chat with an empty load
+      if (convData.messages.length > 0) {
+        reset(convData.messages);
+      }
     }
   }, [convData, reset]);
 
@@ -50,16 +53,18 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
 
   // On mount, check if there's a pending send from a just-created conversation
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || convStatus === 'loading') return;
     const pending = sessionStorage.getItem('ollive.pendingSend');
     if (pending) {
       sessionStorage.removeItem('ollive.pendingSend');
+      // Mark reset as done so the resume effect won't clobber this in-progress send
+      resetDone.current = true;
       send(pending);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]);
+  }, [conversationId, convStatus]);
 
-  async function handleSend(content: string) {
+  const handleSend = useCallback(async (content: string) => {
     if (!conversationId) {
       // No conversation yet — create, navigate, then send on mount
       const conv = await createConversation();
@@ -68,7 +73,7 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
     } else {
       send(content);
     }
-  }
+  }, [conversationId, send, navigate]);
 
   if (conversationId && convStatus === 'loading' && state.messages.length === 0) {
     return <Spinner />;
@@ -138,29 +143,27 @@ export default function ChatView() {
 
   // Import-on-login: when session flips to authenticated AND there's a buffered guest conversation
   const importAttempted = useRef(false);
+  const importOnLoginRef = useRef(guestChat.importOnLogin);
+  importOnLoginRef.current = guestChat.importOnLogin;
   useEffect(() => {
     if (!isAuthenticated || importAttempted.current) return;
     const savedGuest = loadGuestState();
     if (!savedGuest || savedGuest.conversation.messages.length === 0) return;
     importAttempted.current = true;
-    guestChat.importOnLogin().then((conv) => {
+    importOnLoginRef.current().then((conv) => {
       navigate(`/c/${conv.id}`);
     }).catch(() => {
       // If import fails (e.g. idempotent duplicate), just navigate home
       navigate('/');
     });
-  // Only re-run when isAuthenticated changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [isAuthenticated, navigate]);
 
   // FE11: after first response done, refresh the conversation title in the sidebar
   const handleFirstDone = useCallback(
     (_d: SseDoneData) => {
-      if (id) {
-        void conversations.refreshOne(id);
-      }
+      void conversations.refreshOne();
     },
-    [id, conversations],
+    [conversations],
   );
 
   const authError = searchParams.get('auth_error');
