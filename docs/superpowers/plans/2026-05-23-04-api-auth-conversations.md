@@ -6,10 +6,12 @@
 >
 > **Commit convention:** every commit message in this plan must end with the trailer:
 > `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+>
+> **Authoritative contract:** `docs/API-CONTRACTS.md` is the single source of truth for **every endpoint, request/response shape, and error code** in this app. This plan implements its **§1 Auth & Session** and **§2 Conversations (incl. import)** sections (and creates the shared DTO module spec'd in its **§8**). Where this plan and `docs/API-CONTRACTS.md` ever disagree, the contract wins. All request validation and response typing in this plan come from the shared `@ollive/shared/api` module (Task 1.5 below) — **no ad-hoc redefinition of request/response shapes anywhere**: routes import the `*Schema` request validators and the response TS types from `@ollive/shared/api`, and the serializers return those exact types.
 
-**Goal:** Extend the `apps/api` Express app that Plan 3 bootstrapped with the authentication + conversations layer: a JWT session (stateless httpOnly cookie), an `AuthProvider` abstraction with a Google OIDC implementation and a `dev`-mode bypass, the auth routes (`/auth/google`, `/auth/google/callback`, `/auth/logout`, `/auth/me`, `/v1/session`), a `requireAuth` middleware, a guest-session middleware + Redis-backed message-cap enforcement (the semi-public guest trial), a user repository (upsert-by-`google_sub` + idempotent demo-user seed), the user-scoped conversations CRUD router, and the buffered-guest-conversation `import` endpoint. Everything mounts into the existing `createApp({ db, redis, config })` factory at its documented extension point; conversation/message wire shapes are exactly PRD §8.2 and every query is scoped to `req.user.id`.
+**Goal:** Extend the `apps/api` Express app that Plan 3 bootstrapped with the authentication + conversations layer: a JWT session (stateless httpOnly cookie), an `AuthProvider` abstraction with a Google OIDC implementation and a `dev`-mode bypass, the auth routes (`/auth/google`, `/auth/google/callback`, `/auth/logout`, `/auth/me`, `/v1/session`), a `requireAuth` middleware, a guest-session middleware + Redis-backed message-cap enforcement (the semi-public guest trial), a user repository (upsert-by-`google_sub` + idempotent demo-user seed), the user-scoped conversations CRUD router, and the buffered-guest-conversation `import` endpoint. Everything mounts into the existing `createApp({ db, redis, config })` factory at its documented extension point; conversation/message wire shapes are exactly those of `docs/API-CONTRACTS.md` §2 (typed by `@ollive/shared/api`) and every query is scoped to `req.user.id`. This plan also creates the shared `@ollive/shared/api` DTO module (Task 1.5) — the compiler-enforced contract surface consumed by Plans 4/5/6.
 
-**Architecture:** This plan adds the API's *transactional* user-facing surface on top of Plan 3's primitives (typed config, pino, correlation id, `AppError`/`errorHandler`, shared `ioredis` client, the `createApp` factory + `// FUTURE (Plan 4/5)` mount point). Auth is stateless — a signed JWT carried in an httpOnly `session` cookie (no server-side session store, AU2/SE3/S5). The IdP sits behind an `AuthProvider` interface (PRD §15): `GoogleAuthProvider` does the real OIDC code-exchange, while `AUTH_MODE=dev` selects a `DevAuthProvider` whose callback returns a seeded demo identity so `docker compose up` works with no Google credentials (A5/AU4/S1). The OAuth CSRF-`state` is round-tripped through a short-lived signed cookie. The guest trial is enforced *server-side* (never client-trusted): a signed httpOnly `guest_session` cookie carries a random `guestSessionId`, and a Redis counter `guest:{id}:count` (TTL) caps messages at `GUEST_MESSAGE_LIMIT` (BE10/AU7/SE10); a simple in-memory IP limiter backs it up (SE9/S4). Conversations/messages persist synchronously via the existing `@ollive/db` Drizzle tables (`users`/`conversations`/`messages`), every read/write filtered by `user_id` (SE8), with wire shapes matching PRD §8.2 exactly. Import is idempotent on an optional client key and leaves `title_source='default'` so Plan 5's auto-naming can run. Plan 5 (chat/metrics) imports the middleware + guest helpers this plan exports — those signatures are pinned below and must not drift.
+**Architecture:** This plan adds the API's *transactional* user-facing surface on top of Plan 3's primitives (typed config, pino, correlation id, `AppError`/`errorHandler`, shared `ioredis` client, the `createApp` factory + `// FUTURE (Plan 4/5)` mount point). Auth is stateless — a signed JWT carried in an httpOnly `session` cookie (no server-side session store, AU2/SE3/S5). The IdP sits behind an `AuthProvider` interface (PRD §15): `GoogleAuthProvider` does the real OIDC code-exchange, while `AUTH_MODE=dev` selects a `DevAuthProvider` whose callback returns a seeded demo identity so `docker compose up` works with no Google credentials (A5/AU4/S1). The OAuth CSRF-`state` is round-tripped through a short-lived signed cookie. The guest trial is enforced *server-side* (never client-trusted): a signed httpOnly `guest_session` cookie carries a random `guestSessionId`, and a Redis counter `guest:{id}:count` (TTL) caps messages at `GUEST_MESSAGE_LIMIT` (BE10/AU7/SE10); a simple in-memory IP limiter backs it up (SE9/S4). Conversations/messages persist synchronously via the existing `@ollive/db` Drizzle tables (`users`/`conversations`/`messages`), every read/write filtered by `user_id` (SE8), with wire shapes matching `docs/API-CONTRACTS.md` §2 exactly (typed by the shared `@ollive/shared/api` module). Import is idempotent on an optional client key via a **new nullable `conversations.client_conversation_id` column + partial-unique index** (a Plan-4 migration on `@ollive/db`, Task 8.5 below) — the conversation PK stays a random UUID — and leaves `title_source='default'` so Plan 5's auto-naming can run. Plan 5 (chat/metrics) imports the middleware + guest helpers this plan exports — those signatures are pinned below and must not drift. This plan also **owns `DEFAULT_MODEL`** in the API config (Task 1): it adds it to `loadConfig`/`AppConfig` (default `gemini-2.5-flash`) and uses it to stamp new conversations' `provider='google'`/`model`; Plan 5 only READS `config.defaultModel` and must NOT re-add it.
 
 **Tech Stack:** TypeScript 5.7, pnpm workspaces, Vitest 3 (root workspace runner), Express 4 (`^4.21.0` — do **not** substitute Express 5) + supertest 7, `cookie-parser ^1.4.7`, `cors ^2.8.5`, **`jose ^5.9.0`** (JWT sign/verify — see Task 3 justification), **`google-auth-library ^9.15.0`** (Google OIDC code-exchange — see Task 4 justification), pino 9 + pino-http 10, ioredis 5, Zod 3, `@ollive/db` / `@ollive/shared` (workspace), `node:crypto` (`randomUUID`, `timingSafeEqual`, `createHmac`), tsx 4 (run TS as source — no build step). Postgres 16 + Redis 7 from Plan 1's `infra/docker-compose.yml` back the integration tests.
 
@@ -44,13 +46,26 @@ References: PRD §3 (A5 AUTH_MODE, A11 guest trial, A12 naming), §5 (FR13/FR15/
 > ): Promise<{ remaining: number; limit: number }>;
 > ```
 >
-> Redis key for the guest counter is **exactly** `guest:{guestSessionId}:count` (TTL `GUEST_SESSION_TTL`). The session-cookie name is **`session`**; the guest cookie is **`guest_session`**; the OAuth-state cookie is **`oauth_state`**. Conversation/message JSON shapes are **exactly** PRD §8.2 — defined once as serializers in `src/conversations/serialize.ts` and reused by every conversations route (and importable by Plan 5). The `users`/`conversations`/`messages` tables are **exactly** `@ollive/db`'s Drizzle tables — import them, never redefine them. The `createApp` factory signature is unchanged; new routers mount at the existing `// FUTURE (Plan 4/5)` point, BEFORE the 404 fallback + `errorHandler`.
+> Redis key for the guest counter is **exactly** `guest:{guestSessionId}:count` (TTL `GUEST_SESSION_TTL`). The session-cookie name is **`session`**; the guest cookie is **`guest_session`**; the OAuth-state cookie is **`oauth_state`**. Conversation/message JSON shapes are **exactly** `docs/API-CONTRACTS.md` §2 — these shapes are the `Conversation` / `Message` / `ConversationDetail` / `ConversationSummary` / `ConversationListPage` **TS types exported from `@ollive/shared/api`** (Task 1.5); the serializers in `src/conversations/serialize.ts` produce those exact types and are reused by every conversations route (and importable by Plan 5). The pinned middleware/helper contracts above (`requireAuth → req.user`, `guestSession → req.guest`, `checkAndIncrementGuest`, `readGuestRemaining`) are **unchanged** and already match the contract; route handlers simply validate inbound requests with the shared `*Schema` Zod validators and type their responses with the shared response types. The `users`/`conversations`/`messages` tables are **exactly** `@ollive/db`'s Drizzle tables — import them, never redefine them (Task 8.5 adds one nullable column + index to `conversations`). The `createApp` factory signature is unchanged; new routers mount at the existing `// FUTURE (Plan 4/5)` point, BEFORE the 404 fallback + `errorHandler`.
 
 ---
 
 ## File Structure
 
 ```
+packages/
+  shared/
+    package.json                      # EDIT: add `"./api": "./src/api/index.ts"` subpath export (Task 1.5)
+    src/api/index.ts                  # NEW: re-export common/errors/auth/conversations/chat/metrics (Task 1.5)
+    src/api/common.ts                 # NEW: ISOString, cursorSchema, Page<T>, usage re-export (Task 1.5)
+    src/api/errors.ts                 # NEW: AppErrorCode / SseErrorCode unions + error-body types (Task 1.5)
+    src/api/auth.ts                   # NEW: AuthUser/SessionUser/MeResponse/SessionResponse + oauthCallbackQuerySchema (Task 1.5)
+    src/api/conversations.ts          # NEW: Conversation/Message DTOs + list/create/patch/import schemas (Task 1.5)
+    src/api/chat.ts                   # NEW: chat/guest request schemas + SseEvent payload types (Task 1.5; consumed by Plan 5/6)
+    src/api/metrics.ts                # NEW: metricsQuerySchema + overview/series response types (Task 1.5; consumed by Plan 5/6)
+  db/
+    src/schema.ts                     # EDIT: add nullable `client_conversation_id` column + partial-unique index to `conversations` (Task 8.5)
+    drizzle/000X_*.sql                # NEW: drizzle-kit generated migration for the column + index (Task 8.5)
 apps/
   api/
     package.json                      # EDIT: add jose, google-auth-library, cookie-parser, cors (+ @types)
@@ -66,9 +81,9 @@ apps/
     src/middleware/rate-limit.ts      # NEW: ipRateLimit(opts) — simple in-memory fixed-window limiter (SE9/S4)
     src/guest/counter.ts              # NEW: checkAndIncrementGuest + readGuestRemaining (Redis counter, pinned) (BE10/AU7/SE10)
     src/users/repository.ts           # NEW: UserRepository — upsertByGoogleSub, findById, seedDemoUser (idempotent) (AU2/DE7)
-    src/conversations/serialize.ts    # NEW: toConversationDto / toMessageDto / toConversationWithMessagesDto (PRD §8.2 shapes)
+    src/conversations/serialize.ts    # NEW: toConversationSummary / toConversation / toMessage / toConversationDetail (return @ollive/shared/api types; contract §2)
     src/conversations/repository.ts   # NEW: ConversationRepository — list/create/getWithMessages/patch/importConversation (user-scoped, SE8)
-    src/conversations/validation.ts   # NEW: Zod schemas for query/body of every conversations route (BE3)
+    src/conversations/validation.ts   # NEW: re-exports the shared @ollive/shared/api request schemas used by each route (BE3; no local redefinition)
     src/routes/auth.ts                # NEW: authRouter(deps) — /auth/google, /callback, /logout, /me, /v1/session
     src/routes/conversations.ts       # NEW: conversationsRouter(deps) — list/create/get/patch/import (mounted at /v1)
     src/app.ts                        # EDIT: cookie-parser + CORS + mount authRouter & conversationsRouter at the FUTURE point
@@ -85,12 +100,13 @@ apps/
 .env.example                          # EDIT: add JWT_SECRET, GOOGLE_*, AUTH_MODE, WEB_ORIGIN, GUEST_* vars
 ```
 
-**Module responsibilities (single-responsibility, NFR8):** `auth/jwt` and `auth/state` are pure crypto seams (unit-tested in isolation). `auth/provider` + `google-provider` + `dev-provider` are the IdP strategy (Google mocked in tests; dev path real). `middleware/*` are thin DI factories returning `RequestHandler`s. `guest/counter` is a pure-ish Redis helper (the pinned Plan-5 contract). `users/repository` and `conversations/repository` own all DB access (repository pattern, user-scoped). `conversations/serialize` owns the PRD §8.2 wire shape so it can never drift across routes. `routes/*` wire validation → repository → serializer → response and translate failures into `AppError`. `app.ts`/`server.ts` change minimally — only to mount the new middleware/routers and to seed in dev mode.
+**Module responsibilities (single-responsibility, NFR8):** `auth/jwt` and `auth/state` are pure crypto seams (unit-tested in isolation). `auth/provider` + `google-provider` + `dev-provider` are the IdP strategy (Google mocked in tests; dev path real). `middleware/*` are thin DI factories returning `RequestHandler`s. `guest/counter` is a pure-ish Redis helper (the pinned Plan-5 contract). `users/repository` and `conversations/repository` own all DB access (repository pattern, user-scoped). `conversations/serialize` maps Drizzle rows to the `@ollive/shared/api` response types (`ConversationSummary`/`Conversation`/`Message`/`ConversationDetail`) so the contract §2 wire shape can never drift across routes. `routes/*` validate inbound requests with the shared `*Schema` Zod validators, then wire validation → repository → serializer → response and translate failures into `AppError`. `app.ts`/`server.ts` change minimally — only to mount the new middleware/routers and to seed in dev mode.
 
 ---
 
-## Task 1: Config extension — auth/guest/CORS env vars + conditional Google validation (TDD)
-**Implements:** A5/AU4 (`AUTH_MODE`), SE3 (`JWT_SECRET`), SE4 (`WEB_ORIGIN`), AU7/SE10 (`GUEST_MESSAGE_LIMIT`, `GUEST_SESSION_TTL`), AU1 (`GOOGLE_CLIENT_ID/SECRET`). Extends Plan 3's `loadConfig`/`AppConfig` — does NOT introduce a parallel config module.
+## Task 1: Config extension — auth/guest/CORS env vars + `DEFAULT_MODEL` + conditional Google validation (TDD)
+**Implements:** A5/AU4 (`AUTH_MODE`), SE3 (`JWT_SECRET`), SE4 (`WEB_ORIGIN`), AU7/SE10 (`GUEST_MESSAGE_LIMIT`, `GUEST_SESSION_TTL`), AU1 (`GOOGLE_CLIENT_ID/SECRET`), A10 (`DEFAULT_MODEL`). Extends Plan 3's `loadConfig`/`AppConfig` — does NOT introduce a parallel config module.
+> **`DEFAULT_MODEL` ownership (contract §0 / A10):** Plan 4 OWNS `DEFAULT_MODEL`. It is added to the env schema + `AppConfig` HERE and used to stamp new conversations' `provider='google'`/`model` (Tasks 10/11). **Plan 5 only READS `config.defaultModel` (guest chat uses it directly) and MUST NOT re-add it** to the config — there is exactly one definition.
 **Files:**
 - Edit: `apps/api/src/config.ts` — add fields to the Zod env schema + `AppConfig`; add conditional Google validation.
 - Edit: `apps/api/test/config.test.ts` — add the cases below.
@@ -107,20 +123,49 @@ apps/
     webOrigin: string;             // SE4 CORS allowlist + post-login redirect target
     guestMessageLimit: number;     // default 2
     guestSessionTtl: number;       // seconds; guest cookie + Redis counter TTL
+    defaultModel: string;          // A10 — default 'gemini-2.5-flash'; new conversations use provider='google' + this model. Plan 5 READS this; never re-adds it.
     nodeEnv: 'development' | 'production' | 'test';  // drives Secure cookie flag
   }
   // loadConfig(env?: NodeJS.ProcessEnv): AppConfig  — signature unchanged
   ```
-- **Algorithm:** add to the existing `envSchema`: `JWT_SECRET = z.string().min(1)`; `AUTH_MODE = z.enum(['dev','google']).default('dev')`; `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` as `z.string().optional()`; `WEB_ORIGIN = z.string().url().default('http://localhost:5173')`; `GUEST_MESSAGE_LIMIT = z.coerce.number().int().positive().default(2)`; `GUEST_SESSION_TTL = z.coerce.number().int().positive().default(86400)`; `NODE_ENV = z.enum([...]).default('development')`. After `safeParse`, apply a **conditional refinement**: when `AUTH_MODE === 'google'`, both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` must be present/non-empty — otherwise throw the same one-error-lists-all-paths Error Plan 3 uses. Map into `AppConfig`; derive `googleRedirectUri` from an optional `API_BASE_URL` (default `http://localhost:${port}`) + `/auth/google/callback` unless `GOOGLE_REDIRECT_URI` is set explicitly.
+- **Algorithm:** add to the existing `envSchema`: `JWT_SECRET = z.string().min(1)`; `AUTH_MODE = z.enum(['dev','google']).default('dev')`; `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` as `z.string().optional()`; `WEB_ORIGIN = z.string().url().default('http://localhost:5173')`; `GUEST_MESSAGE_LIMIT = z.coerce.number().int().positive().default(2)`; `GUEST_SESSION_TTL = z.coerce.number().int().positive().default(86400)`; `DEFAULT_MODEL = z.string().min(1).default('gemini-2.5-flash')`; `NODE_ENV = z.enum([...]).default('development')`. After `safeParse`, apply a **conditional refinement**: when `AUTH_MODE === 'google'`, both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` must be present/non-empty — otherwise throw the same one-error-lists-all-paths Error Plan 3 uses. Map into `AppConfig`; derive `googleRedirectUri` from an optional `API_BASE_URL` (default `http://localhost:${port}`) + `/auth/google/callback` unless `GOOGLE_REDIRECT_URI` is set explicitly.
 - **Patterns / decisions / edge cases:** typed-config + fail-fast (Plan 3 convention). Conditional validation keeps `docker compose up` one-command in dev (Google creds optional) while making `AUTH_MODE=google` refuse to boot without them (A5/AU4). `webOrigin` is the single source for both CORS and the post-callback redirect. `nodeEnv` gates the `Secure` cookie attribute (SE3) so tests over plain HTTP still receive cookies.
 **Test cases (write first, TDD):**
-- Valid dev env (no Google creds) → `authMode === 'dev'`, defaults applied (`guestMessageLimit === 2`, `guestSessionTtl === 86400`, `webOrigin` default).
+- Valid dev env (no Google creds) → `authMode === 'dev'`, defaults applied (`guestMessageLimit === 2`, `guestSessionTtl === 86400`, `webOrigin` default, `defaultModel === 'gemini-2.5-flash'`).
+- `DEFAULT_MODEL='gemini-2.5-pro'` → `defaultModel === 'gemini-2.5-pro'` (override honored).
 - `AUTH_MODE=google` WITHOUT `GOOGLE_CLIENT_ID`/`SECRET` → throws; message mentions `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 - `AUTH_MODE=google` WITH both Google vars → parses; `googleClientId`/`googleClientSecret` mapped through; `googleRedirectUri` ends with `/auth/google/callback`.
 - Missing `JWT_SECRET` → throws, message mentions `JWT_SECRET`.
 - `GUEST_MESSAGE_LIMIT='5'` and `GUEST_SESSION_TTL='3600'` coerced to numbers `5`/`3600`.
 - Invalid `WEB_ORIGIN` (`'not-a-url'`) → throws, message mentions `WEB_ORIGIN`.
 **Done when:** `config` tests green + `pnpm --filter @ollive/api exec tsc --noEmit` clean (run `pnpm install` after editing `package.json` in Task 2 if ordering requires; config-only deps are stdlib). commit: `feat(api): extend config with auth, guest, and CORS env vars`.
+
+---
+
+## Task 1.5: Create the `@ollive/shared/api` DTO module — the contract surface for Plans 4/5/6 (TDD)
+**Implements:** `docs/API-CONTRACTS.md` **§8 (`@ollive/shared/api` module spec)** — the single canonical typed representation of every HTTP/SSE shape. Plan 4 is the first API plan, so it creates the **whole** module (Plans 5 and 6 only import from it; they do NOT add to it for their own endpoints unless a future shape is genuinely new). **No Express dependency — this task can run FIRST**, before/parallel to Task 1.
+**Files:**
+- Edit: `packages/shared/package.json` — add the `./api` subpath to `exports`: `"exports": { ".": "./src/index.ts", "./api": "./src/api/index.ts" }`. This is REQUIRED — a package `exports` map blocks undeclared subpaths, so without it `import … from '@ollive/shared/api'` will not resolve. Do NOT re-export the api module from the root `src/index.ts`; `@ollive/shared/api` is the single canonical import path for API DTOs (root stays enums/log/streams).
+- Create: `packages/shared/src/api/index.ts` — `export *` from `./common`, `./errors`, `./auth`, `./conversations`, `./chat`, `./metrics`.
+- Create: `packages/shared/src/api/common.ts`, `errors.ts`, `auth.ts`, `conversations.ts`, `chat.ts`, `metrics.ts`.
+- Test: `packages/shared/test/api.test.ts` (or per-file tests) — schemas parse valid / reject invalid; types compile.
+**Design:** Author each file **exactly per the module spec in `docs/API-CONTRACTS.md` §8** (that section IS the contract; the schema/type *names and field shapes* below are authoritative — keep design-level, declaring schema fields and type members but no logic beyond the field declarations / `.refine` predicates already specified there). Conventions (matching the existing package): **Zod 3**, TS source consumed directly (no build step), `z.infer` for request types. Request bodies/queries are `*Schema` Zod values; responses are TS types.
+- **`common.ts`** — `type ISOString = string` (ISO-8601 UTC brand); re-export `usageSchema` + `type Usage` from `../log`; `const cursorSchema = z.string().min(1)` (opaque keyset cursor = last item's id); `interface Page<T> { items: T[]; nextCursor: string | null }` (note: `nextCursor` always present, `null` on last page).
+- **`errors.ts`** — `const appErrorCode = z.enum(['validation_error','unauthorized','login_required','not_found','rate_limited','internal_error'])` + `type AppErrorCode`; `const sseErrorCode = z.enum(['rate_limited','provider_timeout','provider_error','internal_error'])` + `type SseErrorCode`; `interface ApiErrorBody { error: AppErrorCode; details?: unknown }`; `interface LoginRequiredBody { error: 'login_required'; remaining: number }` (the one HTTP error carrying an extra field). This is the **canonical error catalog** (contract §7) — Plan 4's `rate_limited`(429, IP limiter) and every other code reference this enum rather than inventing shapes; the HTTP error body is `{ error: <code>, details? }`.
+- **`auth.ts`** — `interface AuthUser { id; email; name?; avatarUrl? }` (full profile, `GET /auth/me`); `interface SessionUser { id; email; name? }` (slim, no `avatarUrl`, echoed in `/v1/session`); `interface MeResponse { user: AuthUser }`; `type SessionResponse = { authenticated: false; guest: { remaining: number; limit: number } } | { authenticated: true; user: SessionUser }` (discriminated union; never 401); `const oauthCallbackQuerySchema = z.object({ code: z.string().min(1), state: z.string().min(1) })` + `type OauthCallbackQuery`.
+- **`conversations.ts`** — Response DTOs: `interface ConversationSummary { id; title; status:'active'|'archived'; provider; model; createdAt:ISOString; updatedAt:ISOString }` (**NO `messages`, NO `title_source`**); `type Conversation = ConversationSummary` (POST/PATCH header); `interface Message { id; role:'user'|'assistant'|'system'; content; tokenCount?:number; status:'complete'|'partial'|'error'; sequence:number; createdAt:ISOString }` (`tokenCount` **omitted** for user msgs / when unknown — distinct from `0`); `interface ConversationDetail extends Conversation { messages: Message[] }`; `type ConversationListPage = Page<ConversationSummary>`. Request schemas: `listConversationsQuerySchema = z.object({ status: conversationStatus.default('active'), limit: z.coerce.number().int().min(1).max(100).default(20), cursor: z.string().min(1).optional() })`; `createConversationSchema = z.object({ title: z.string().min(1).optional() })`; `patchConversationSchema = z.object({ title: z.string().min(1).optional(), status: conversationStatus.optional() }).refine(at-least-one-of-title-or-status)`; `importMessageSchema = z.object({ role: z.enum(['user','assistant']), content: z.string().min(1) })`; `importConversationSchema = z.object({ clientConversationId: z.string().min(1).max(200).optional(), messages: z.array(importMessageSchema).min(1) })`. Reuse `conversationStatus`/`messageRole`/`messageStatus` from `../enums`. Export the `z.infer` request types (`ListConversationsQuery`, `CreateConversationBody`, `PatchConversationBody`, `ImportConversationBody`).
+- **`chat.ts`** (consumed by Plan 5/6 — created here so the module is complete) — `chatMessageSchema = z.object({ content: z.string().min(1) })`; `guestTurnSchema = z.object({ role: z.enum(['user','assistant']), content: z.string() })`; `guestMessageSchema = z.object({ messages: z.array(guestTurnSchema).max(50), content: z.string().min(1) })`; SSE payload types `SseStartData { messageId: string|null; requestId: string }`, `SseTokenData { delta: string }`, `SseDoneData { messageId: string|null; finishReason: string; usage: Usage }` (usage **always present**), `SseErrorData { code: 'rate_limited'|'provider_timeout'|'provider_error'|'internal_error'; message: string }`, and the discriminated `SseEvent` union over `start|token|done|error`. Export the `z.infer` request types (`ChatMessageBody`, `GuestMessageBody`).
+- **`metrics.ts`** (consumed by Plan 5/6) — `metricsBucket = z.enum(['1m','5m','1h','1d'])`; `metricsQuerySchema = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional(), provider: z.string().min(1).optional(), model: z.string().min(1).optional(), bucket: metricsBucket.default('1m') }).refine(from <= to)`; response types `MetricsRange`, `OverviewMetrics`, point types `LatencyPoint`/`ThroughputPoint { t; count }`/`ErrorPoint { t; count; errorCount; errorRate }`/`TokenPoint { t; promptTokens; completionTokens; totalTokens }`, the generic `MetricsSeries<P> { bucket: MetricsBucket; series: P[] }`, and the `LatencySeries`/`ThroughputSeries`/`ErrorSeries`/`TokenSeries` aliases.
+- **Patterns / decisions / edge cases:** the module follows the existing `@ollive/shared` conventions (no build step, `export *` from index). Requests are **runtime-validated** (Zod) server-side (BE3); responses are **compile-time** TS contracts (the server produces them, the frontend types its client with them — NFR7). Reuse `usageSchema`/`Usage` from `log.ts` (do not redefine token usage) and the enums from `enums.ts`. This task is decoupled from Express so it can land first; Tasks 9–11 then `import` the conversation schemas/types from here rather than defining their own.
+**Test cases (write first, TDD):**
+- `listConversationsQuerySchema` parses `{}` → defaults (`status='active'`, `limit=20`); coerces `limit='50'`→`50`; **rejects** `limit=101` and `limit=0` and a bad `status`.
+- `createConversationSchema` accepts `{}` and `{ title:'x' }`; rejects `{ title:'' }`.
+- `patchConversationSchema` accepts `{ title }`, `{ status }`, both; **rejects `{}`** (the at-least-one refinement) and a bad `status` enum.
+- `importConversationSchema` accepts a 1+-message array with `user`/`assistant` roles; **rejects** empty `messages`, a `system` role, empty `content`, and a `clientConversationId` over 200 chars.
+- `chatMessageSchema` rejects empty `content`; `guestMessageSchema` accepts history + `content` and rejects empty `content`.
+- `metricsQuerySchema` defaults `bucket='1m'`, coerces `from`/`to` to dates, and **rejects `from > to`**.
+- Type-level: a sample `ConversationDetail`/`OverviewMetrics`/`SseEvent` literal compiles; `tsc --noEmit` clean across `@ollive/shared`.
+**Done when:** `pnpm --filter @ollive/shared exec vitest run` (the new api schema tests) green + `pnpm --filter @ollive/shared exec tsc --noEmit` clean; `import { listConversationsQuerySchema, type ConversationDetail } from '@ollive/shared/api'` resolves. commit: `feat(shared): add @ollive/shared/api DTO module (HTTP + SSE contract types)`.
 
 ---
 
@@ -302,7 +347,7 @@ apps/
   - `guestSession`: read `req.cookies['guest_session']`; if present, `verifyGuestCookie` → on valid signature use that `guestId`; if absent/tampered, `guestId = randomUUID()` and re-issue. Set `req.guest = { id: guestId }`. When (re)issuing, `res.cookie('guest_session', signGuestId(guestId, config.jwtSecret), { httpOnly: true, sameSite: 'lax', secure: config.nodeEnv==='production', path: '/', maxAge: config.guestSessionTtl*1000 })`. (Reuse `JWT_SECRET` as the HMAC key — a single secret to manage; the value is not a JWT, just a signed id.)
   - `signGuestId` / `verifyGuestCookie`: HMAC-SHA256 over the id; verify with `timingSafeEqual`; reject if the id is not a valid UUID shape or the MAC mismatches.
   - `ipRateLimit`: a module-level `Map<key, { count: number; resetAt: number }>`. Per request: `key = keyFn?.(req) ?? (req.ip ?? 'unknown')`; if `now > entry.resetAt` reset the window (`count=0`, `resetAt=now+windowMs`); `count++`; if `count > max` the limiter responds directly `res.status(429).json({ error: 'rate_limited' })` and returns (does NOT call `next()`); otherwise `next()`. Bound the map by lazily pruning entries whose `resetAt < now` on access (and dropping expired entries when the map grows past a soft cap).
-- **Patterns / decisions / edge cases:** middleware factories + DI. The guest cookie is signed (HMAC) so a client cannot forge another guest's id to dodge the cap; a tampered/absent cookie yields a fresh guest (acceptable — S9). The in-memory limiter is intentionally simple (single-process, demo scale — SE9/S4); a distributed limiter is the documented next step. **Error-shape decision:** `429`/`rate_limited` is intentionally OUTSIDE Plan 3's typed `ErrorCode` union (`validation_error|unauthorized|not_found|login_required|internal_error`), so `ipRateLimit` is the one place that emits a JSON error directly (`{ error: 'rate_limited' }`, status 429) instead of throwing an `AppError` through the central handler — keeping the `ErrorCode` union untouched. Reuse `JWT_SECRET` for guest-cookie HMAC to avoid a second secret.
+- **Patterns / decisions / edge cases:** middleware factories + DI. The guest cookie is signed (HMAC) so a client cannot forge another guest's id to dodge the cap; a tampered/absent cookie yields a fresh guest (acceptable — S9). The in-memory limiter is intentionally simple (single-process, demo scale — SE9/S4); a distributed limiter is the documented next step. **Error-shape decision (contract §7 catalog):** `rate_limited` (429) is part of the canonical `AppErrorCode` catalog (defined in `@ollive/shared/api` `errors.ts`, Task 1.5), but the contract notes it is **emitted by the in-memory IP limiter as a direct `{ error: 'rate_limited' }` (429) body, outside the typed `AppError` path** — so `ipRateLimit` writes that JSON directly (`res.status(429).json({ error: 'rate_limited' })`) and returns, rather than throwing an `AppError` through the central handler. The body still matches the catalog's `{ error: <code> }` shape (no `details`). (Plan 3's `AppError` `ErrorCode` union is left untouched; `rate_limited` lives in the shared catalog used for typing/client-side normalization.) Reuse `JWT_SECRET` for guest-cookie HMAC to avoid a second secret.
 **Test cases (write first, TDD):** none in isolation — `guest_session` issuance + signature and the limiter are asserted via Task 9 (`GET /v1/session` sets `guest_session`; replaying the cookie keeps the same `guestSessionId`; a forged cookie is rejected and re-issued). A small optional unit test for `signGuestId`/`verifyGuestCookie` round-trip + tamper is encouraged for TDD parity.
 **Done when:** `pnpm --filter @ollive/api exec tsc --noEmit` clean. commit: `feat(api): add guest session middleware and in-memory IP rate limiter`.
 
@@ -338,8 +383,35 @@ apps/
 
 ---
 
-## Task 9: Auth routes + `createApp` mount (§8.1, AU3/AU4/AU8) (TDD, supertest)
-**Implements:** the §8.1 contract: `GET /auth/google` (302 to consent, set `oauth_state`), `GET /auth/google/callback` (verify state → `handleCallback` → upsert user → set `session` cookie → 302 to `WEB_ORIGIN`), `POST /auth/logout` (clear cookie, 204), `GET /auth/me` (200 `{ user }` | 401), `GET /v1/session` (never 401; auth status + guest remaining). Mounts the router into `createApp`. Tested in dev mode end-to-end; Google mode tested by INJECTING a fake `AuthProvider` (no network).
+## Task 8.5: `@ollive/db` migration — `conversations.client_conversation_id` column + partial-unique index (contract §2 RESOLUTION 7) (TDD)
+**Implements:** the import-idempotency storage that the contract mandates (`docs/API-CONTRACTS.md` §2 import note): a **new nullable `client_conversation_id TEXT` column** on `conversations` plus a **partial-unique index on `(user_id, client_conversation_id) WHERE client_conversation_id IS NOT NULL`**. This **supersedes** the plan's former "UUIDv5-derived primary key" idempotency approach — the conversation PK stays a random UUID; dedup lives in this column. Task 11 (`importConversation`) depends on this.
+**Files:**
+- Edit: `packages/db/src/schema.ts` — add the column + partial-unique index to the existing `conversations` `pgTable` (do NOT touch its `id`/PK).
+- Create (generated): `packages/db/drizzle/000X_*.sql` (+ updated `meta/_journal.json` / snapshot) via `pnpm --filter @ollive/db generate`.
+- Test: extend a `@ollive/db` migration/schema test (or `apps/api/test/import.int.test.ts` setup) to assert the column + partial index exist after `runMigrations`.
+**Design:**
+- **Schema change (Drizzle):** add to the `conversations` table definition:
+  ```ts
+  // column
+  clientConversationId: text('client_conversation_id'),   // nullable
+  // in the table's index/constraint array:
+  uniqueIndex('uq_conv_user_client_convo')
+    .on(t.userId, t.clientConversationId)
+    .where(sql`${t.clientConversationId} is not null`),   // PARTIAL unique
+  ```
+  Leave `id: uuid('id').primaryKey().defaultRandom()` unchanged — the PK is a random UUID; idempotency is the `(user_id, client_conversation_id)` partial-unique pair, not a derived/hashed PK.
+- **Migration generation:** run drizzle-kit (`generate` script) to emit the new SQL migration; commit the generated file + the updated `meta/` journal/snapshot. The migration must add a `client_conversation_id text` column and the partial unique index `... WHERE client_conversation_id IS NOT NULL`. Run with the existing `runMigrations` path (no new migrate code).
+- **Patterns / decisions / edge cases:** nullable column means rows without a client key are exempt from the unique constraint (multiple `NULL`s allowed) — exactly the "import without `clientConversationId` always creates a fresh conversation" behavior. The pair `(user_id, client_conversation_id)` makes dedup **per-user**: the same client key from a different user is a distinct row. This is an additive, backward-compatible migration (existing rows get `NULL`).
+**Test cases (write first, TDD — real Postgres, `runMigrations` in `beforeAll`):**
+- After `runMigrations`, `conversations` has a nullable `client_conversation_id` column.
+- A partial unique index on `(user_id, client_conversation_id) WHERE client_conversation_id IS NOT NULL` exists (e.g. assert via `pg_indexes`/`information_schema`).
+- Inserting two rows for the **same** `user_id` with the **same** non-null `client_conversation_id` violates the unique index; with `NULL` `client_conversation_id` it does not (multiple nulls allowed).
+**Done when:** the generated migration applies cleanly via `runMigrations`; `@ollive/db` typecheck + tests green. commit: `feat(db): add conversations.client_conversation_id column + partial-unique index`.
+
+---
+
+## Task 9: Auth routes + `createApp` mount (§1 Auth & Session, AU3/AU4/AU8) (TDD, supertest)
+**Implements:** the `docs/API-CONTRACTS.md` **§1** contract: `GET /auth/google` (302 to consent, set `oauth_state`), `GET /auth/google/callback` (verify state → `handleCallback` → upsert user → set `session` cookie → 302 to `WEB_ORIGIN`; on failure 302 to `${WEB_ORIGIN}/?auth_error=1`), `POST /auth/logout` (clear cookie, 204), `GET /auth/me` (200 `MeResponse` | 401 `{ error: 'unauthorized' }`), `GET /v1/session` (never 401; `SessionResponse` discriminated union). Request validation uses `oauthCallbackQuerySchema`; responses are typed `MeResponse` / `SessionResponse` from `@ollive/shared/api`. Mounts the router into `createApp`. Tested in dev mode end-to-end; Google mode tested by INJECTING a fake `AuthProvider` (no network).
 **Files:**
 - Create: `apps/api/src/routes/auth.ts`.
 - Edit: `apps/api/src/app.ts` — accept an optional injected `authProvider` in `AppDeps` (default `createAuthProvider(config)`); build `UserRepository` from `db`; mount `authRouter` at `/` and the `/v1/session` route at `/v1` (or mount the whole router at `/` and let it declare `/v1/session` internally) at the FUTURE point.
@@ -360,10 +432,10 @@ apps/
   ```
 - **Algorithm (per route):**
   - `GET /auth/google`: `const { state } = signState(config.jwtSecret)`; set `oauth_state` cookie (httpOnly, SameSite=Lax, short maxAge ~10min, secure-in-prod); `res.redirect(302, authProvider.getAuthorizationUrl(state))`.
-  - `GET /auth/google/callback`: validate `req.query.code` + `req.query.state` are present strings (`AppError('validation_error')` if not); `verifyState(state, jwtSecret)` AND match against the `oauth_state` cookie — on failure `AppError('unauthorized')`; `const identity = await authProvider.handleCallback(code)`; `const user = await users.upsertByGoogleSub({ googleSub: identity.sub, ...identity })`; `const token = await signSession({ sub: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl }, jwtSecret)`; `setSessionCookie(res, token, { secure })`; clear `oauth_state`; `res.redirect(302, config.webOrigin)`. Wrap in try/catch → on provider failure redirect to `${webOrigin}?auth_error=1` (don't leak provider detail).
+  - `GET /auth/google/callback`: validate `req.query` with `oauthCallbackQuerySchema` (`code`/`state` present non-empty strings; `AppError('validation_error')` if not — note that per contract §1 the callback's own error path redirects to `${webOrigin}/?auth_error=1` rather than returning a JSON body, so the catch-all below covers validation failures too); `verifyState(state, jwtSecret)` AND match against the `oauth_state` cookie — on failure `AppError('unauthorized')`; `const identity = await authProvider.handleCallback(code)`; `const user = await users.upsertByGoogleSub({ googleSub: identity.sub, ...identity })`; `const token = await signSession({ sub: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl }, jwtSecret)`; `setSessionCookie(res, token, { secure })`; clear `oauth_state`; `res.redirect(302, config.webOrigin)`. Wrap in try/catch → on any state/provider/validation failure redirect to `${webOrigin}/?auth_error=1` (don't leak provider detail; no JSON error body — contract §1).
   - `POST /auth/logout`: `clearSessionCookie(res, { secure })`; `res.status(204).end()`.
-  - `GET /auth/me`: behind `requireAuth(deps)` → `res.json({ user: req.user })`; without a valid cookie → 401 via `requireAuth`.
-  - `GET /v1/session` (NEVER 401): try `verifySession(req.cookies['session'])`; on success → `{ authenticated: true, user: { id, email, name } }`. On failure/absent → ensure a guest identity (run `guestSession` inline or read+issue the `guest_session` cookie) and `const { remaining, limit } = await readGuestRemaining(redis, guestId, config.guestMessageLimit)` → `{ authenticated: false, guest: { remaining, limit } }`. Wire shape EXACTLY PRD §8.1.
+  - `GET /auth/me`: behind `requireAuth(deps)` → `res.json({ user: req.user })` typed as `MeResponse` (full `AuthUser`, incl. `avatarUrl?`); without a valid cookie → 401 `{ error: 'unauthorized' }` via `requireAuth`.
+  - `GET /v1/session` (NEVER 401): try `verifySession(req.cookies['session'])`; on success → `{ authenticated: true, user: { id, email, name } }` (slim `SessionUser` — **no `avatarUrl`** here, per contract §1; use `/auth/me` for the full profile). On failure/absent → ensure a guest identity (run `guestSession` inline or read+issue the `guest_session` cookie) and `const { remaining, limit } = await readGuestRemaining(redis, guestId, config.guestMessageLimit)` → `{ authenticated: false, guest: { remaining, limit } }`. Response typed as the `SessionResponse` discriminated union from `@ollive/shared/api`; wire shape EXACTLY contract §1.
   - In `createApp`: `const authProvider = deps.authProvider ?? createAuthProvider(config)`; `const users = createUserRepository(db)`; mount `authRouter({ config, redis, users, authProvider })`.
 - **Patterns / decisions / edge cases:** DI of `AuthProvider` is the test seam — Google-mode tests pass a fake whose `handleCallback` returns a canned identity, so NO real Google call occurs; dev-mode tests use the real `DevAuthProvider`. `/v1/session` must never 401 (it drives the UI guest indicator) — failures degrade to the guest branch. CSRF `state` is double-checked (signature + cookie match). `oauth_state` is single-use (cleared on callback). All async route handlers forward errors with `next(err)`.
 **Test cases (write first, TDD — supertest against `createApp` with real Postgres + real Redis; use a supertest agent to persist cookies; `afterEach` truncates `users` + clears guest keys):**
@@ -378,8 +450,8 @@ apps/
 
 ---
 
-## Task 10: Conversations repository + serializers + validation + CRUD router (§8.2, FR1/FR5/FR6/FR7, SE8) (TDD, supertest)
-**Implements:** §8.2 list/create/get/patch — user-scoped (SE8), cursor pagination + status filter (FR5), get-with-messages (FR6), rename (sets `title_source='user'`) + archive (FR7). Wire shapes EXACTLY PRD §8.2.
+## Task 10: Conversations repository + serializers + validation + CRUD router (contract §2, FR1/FR5/FR6/FR7, SE8) (TDD, supertest)
+**Implements:** `docs/API-CONTRACTS.md` **§2** list/create/get/patch — user-scoped (SE8), cursor pagination + status filter (FR5), get-with-messages (FR6), rename (sets `title_source='user'`) + archive (FR7). Wire shapes EXACTLY contract §2, typed by `@ollive/shared/api`: **list returns `{ items: ConversationSummary[], nextCursor: string | null }`** (`ConversationListPage`; items carry NO `messages`, NO `title_source`); detail returns `ConversationDetail` (`Conversation` + `messages: Message[]`); POST/PATCH return `Conversation`. Request validation uses the shared `listConversationsQuerySchema` / `createConversationSchema` / `patchConversationSchema`.
 **Files:**
 - Create: `apps/api/src/conversations/serialize.ts`, `apps/api/src/conversations/repository.ts`, `apps/api/src/conversations/validation.ts`, `apps/api/src/routes/conversations.ts`.
 - Edit: `apps/api/src/app.ts` — mount `conversationsRouter` at `/v1` behind `requireAuth` at the FUTURE point.
@@ -387,50 +459,50 @@ apps/
 **Design:**
 - **Signatures / types:**
   ```ts
-  // serialize.ts — the PRD §8.2 wire shapes (single source of truth)
-  interface ConversationDto {
-    id: string; title: string; status: 'active'|'archived';
-    provider: string; model: string; createdAt: string; updatedAt: string;
-  }
-  interface MessageDto {
-    id: string; role: 'user'|'assistant'|'system'; content: string;
-    tokenCount?: number; status?: 'complete'|'partial'|'error';
-    sequence: number; createdAt: string;
-  }
-  interface ConversationWithMessagesDto extends ConversationDto { messages: MessageDto[] }
-  function toConversationDto(row: Conversation): ConversationDto;
-  function toMessageDto(row: Message): MessageDto;
-  function toConversationWithMessagesDto(conv: Conversation, msgs: Message[]): ConversationWithMessagesDto;
+  // serialize.ts — maps Drizzle rows to the @ollive/shared/api response types (single source of truth = contract §2).
+  // Import the types; do NOT redefine them here.
+  import type {
+    ConversationSummary, Conversation, Message, ConversationDetail,
+  } from '@ollive/shared/api';
+  // (Conversation === ConversationSummary; both omit messages + title_source.)
+  function toConversationSummary(row: ConversationRow): ConversationSummary;          // list item
+  function toConversation(row: ConversationRow): Conversation;                        // POST/PATCH header (same shape)
+  function toMessage(row: MessageRow): Message;                                       // tokenCount omitted when null/user msg; status mapped
+  function toConversationDetail(conv: ConversationRow, msgs: MessageRow[]): ConversationDetail; // detail / import
 
-  // repository.ts — every method scoped to userId (SE8)
+  // repository.ts — every method scoped to userId (SE8). Result/query types reuse the shared request/response types.
+  import type {
+    ConversationSummary, Conversation, ConversationDetail, ConversationListPage,
+  } from '@ollive/shared/api';
   interface ListConversationsParams { userId: string; status: 'active'|'archived'; limit: number; cursor?: string }
-  interface ListConversationsResult { items: ConversationDto[]; nextCursor: string | null }
+  // list returns the shared ConversationListPage = { items: ConversationSummary[]; nextCursor: string | null }
   interface CreateConversationInput { userId: string; title?: string; provider: string; model: string }
   interface PatchConversationInput { title?: string; status?: 'active'|'archived' }
   interface ConversationRepository {
-    list(p: ListConversationsParams): Promise<ListConversationsResult>;
-    create(input: CreateConversationInput): Promise<ConversationDto>;
-    getWithMessages(userId: string, id: string): Promise<ConversationWithMessagesDto | null>;
-    patch(userId: string, id: string, input: PatchConversationInput): Promise<ConversationDto | null>;
+    list(p: ListConversationsParams): Promise<ConversationListPage>;
+    create(input: CreateConversationInput): Promise<Conversation>;
+    getWithMessages(userId: string, id: string): Promise<ConversationDetail | null>;
+    patch(userId: string, id: string, input: PatchConversationInput): Promise<Conversation | null>;
   }
   function createConversationRepository(db: Db): ConversationRepository;
 
-  // routes
+  // routes — validation via shared schemas (listConversationsQuerySchema / createConversationSchema / patchConversationSchema)
   interface ConversationsRouterDeps { config: AppConfig; conversations: ConversationRepository }
   function conversationsRouter(deps: ConversationsRouterDeps): Router;
   ```
 - **Algorithm (per route, all behind `requireAuth`):**
-  - `GET /v1/conversations?status=&limit=&cursor=`: validate query (`status` enum default `active`, `limit` 1–50 default 20, `cursor` optional). `repository.list`: `where userId = req.user.id AND status = status`, order by `updatedAt DESC, id DESC`, `limit limit+1`. Cursor is the `updatedAt|id` of the last returned row (opaque, base64url) — if a `cursor` is supplied, add a keyset predicate `(updatedAt, id) < (cursorUpdatedAt, cursorId)`. Take `limit` rows; if a `(limit+1)`th existed, emit `nextCursor` else `null`. Respond `{ items: ConversationDto[], nextCursor }`.
-  - `POST /v1/conversations` `{ title? }`: `repository.create({ userId, title, provider: config defaults, model: config defaults })` → 201 `ConversationDto`. (Provider/model default from config — `provider='google'`, `model=DEFAULT_MODEL` if present, else `'gemini-2.5-flash'`; conversations record the provider/model used, PA4.)
-  - `GET /v1/conversations/:id`: `repository.getWithMessages(userId, id)`; `null` → `AppError('not_found')`; else 200 `ConversationWithMessagesDto` (messages ordered by `sequence ASC`).
-  - `PATCH /v1/conversations/:id` `{ title?, status? }`: validate (at least one field). When `title` present, also set `titleSource = 'user'` (FR18 — provenance, never inferred from the string). When `status` present, set it. Always bump `updatedAt`. Scoped `where userId AND id`; affected 0 rows → `AppError('not_found')`; else 200 `ConversationDto`.
-- **Patterns / decisions / edge cases:** repository pattern + serializer module (the §8.2 shape lives in exactly one place; Plan 5 imports `toMessageDto` for its streamed message persistence). **SE8 user-scoping is enforced in every WHERE clause** — a conversation owned by another user returns `not_found` (404), never another user's data. Keyset (cursor) pagination over `(updatedAt DESC, id DESC)` is stable under inserts and uses `idx_conv_user_status_updated`. Rename sets `title_source='user'` so auto-naming (Plan 5) never clobbers it (FR18/A12). Zod validation (BE3) → `validation_error` (400). `numeric`/timestamp columns serialize to ISO strings; `tokenCount`/`status` omitted from `MessageDto` only when null per the §8.2 example (assistant messages carry them).
+  - `GET /v1/conversations?status=&limit=&cursor=`: validate query with `listConversationsQuerySchema` (`status` enum default `active`, **`limit` 1–100 default 20** — `limit > 100` is rejected as `validation_error` per contract §2, `cursor` optional opaque string). `repository.list`: `where userId = req.user.id AND status = status`, order by `updatedAt DESC, id DESC`, `limit limit+1`. **Cursor is the opaque last-item id** (contract §2: clients treat it as a black box) — internally it keys the `(updatedAt, id) < (cursorUpdatedAt, cursorId)` predicate (resolve the cursor row's `updatedAt` by id, or encode `updatedAt|id` and treat the encoded form as the opaque token). Take `limit` rows; if a `(limit+1)`th existed, `nextCursor` = the last returned item's id, else `null`. Respond the shared `ConversationListPage` `{ items: ConversationSummary[], nextCursor: string | null }` (items via `toConversationSummary` — NO messages, NO `title_source`).
+  - `POST /v1/conversations` `{ title? }` (validate with `createConversationSchema`): `repository.create({ userId, title, provider: 'google', model: config.defaultModel })` → 201 `Conversation` (no messages — a new conversation has none). Provider/model come from config: **`provider='google'`, `model=config.defaultModel`** (owned by Plan 4 Task 1; conversations record the provider/model used, PA4). `title` defaults to `'New conversation'`, `title_source='default'` server-side (never serialized).
+  - `GET /v1/conversations/:id`: `repository.getWithMessages(userId, id)`; `null` → `AppError('not_found')` (unknown id OR not owned — no existence leak, SE8); else 200 `ConversationDetail` (`Conversation` + `messages: Message[]`, ordered by `sequence ASC`; per-message `tokenCount` omitted when null).
+  - `PATCH /v1/conversations/:id` `{ title?, status? }`: validate with `patchConversationSchema` (its `.refine` requires at least one field → empty body is `validation_error`). When `title` present, also set `titleSource = 'user'` (FR18 — provenance, never inferred from the string). When `status` present, set it. Always bump `updatedAt`. Scoped `where userId AND id`; affected 0 rows → `AppError('not_found')` (unknown or not owned); else 200 `Conversation`.
+- **Patterns / decisions / edge cases:** repository pattern + serializer module producing the shared `@ollive/shared/api` types (the contract §2 shape lives in exactly one place; Plan 5 imports `toMessage` for its streamed message persistence). **SE8 user-scoping is enforced in every WHERE clause** — a conversation owned by another user returns `not_found` (404), never another user's data, no existence leak. Keyset (cursor) pagination over `(updatedAt DESC, id DESC)` is stable under inserts and uses `idx_conv_user_status_updated`; `nextCursor` is the opaque last-item id (`null` on the last page), `limit` default 20 / max 100 (over-100 rejected). Rename sets `title_source='user'` so auto-naming (Plan 5) never clobbers it (FR18/A12). Validation uses the shared Zod schemas (BE3) → `validation_error` (400). Timestamp columns serialize to ISO strings; `Message.tokenCount` is **omitted entirely when null** (user messages / not-yet-counted), distinct from a numeric `0` — `status` is always present.
 **Test cases (write first, TDD — supertest with two distinct authed agents (two seeded users) where cross-user scoping is tested; real Postgres + Redis; truncate between tests):**
-- `POST /v1/conversations` (authed) → 201 with `title === 'New conversation'`, `status === 'active'`, `provider === 'google'`, `model` set, ISO `createdAt`/`updatedAt`; shape matches §8.2 exactly.
-- `POST /v1/conversations` WITHOUT a session cookie → 401.
-- `GET /v1/conversations?status=active` → returns the user's active conversations, most-recently-updated first; archived ones excluded.
-- Pagination: create 3, `limit=2` → first page 2 items + a `nextCursor`; following the cursor → the remaining 1 item, `nextCursor: null`.
-- `GET /v1/conversations/:id` for own conversation → 200 with `messages` array (ordered by sequence). For a NON-existent id → 404 `not_found`. For ANOTHER user's conversation id → 404 `not_found` (SE8 — no cross-user read).
+- `POST /v1/conversations` (authed) → 201 `Conversation` with `title === 'New conversation'`, `status === 'active'`, `provider === 'google'`, `model === config.defaultModel` (`'gemini-2.5-flash'` by default), ISO `createdAt`/`updatedAt`, **no `messages` / `title_source` in the body**; shape matches contract §2 exactly.
+- `POST /v1/conversations` WITHOUT a session cookie → 401 `{ error: 'unauthorized' }`.
+- `GET /v1/conversations?status=active` → `{ items: ConversationSummary[], nextCursor }`; items are the user's active conversations, most-recently-updated first; archived ones excluded; **no `messages` / `title_source` on items**.
+- `limit=101` → 400 `validation_error` (over the max of 100).
+- Pagination: create 3, `limit=2` → first page `items.length === 2` + a non-null `nextCursor`; following `?cursor=<nextCursor>` → the remaining 1 item, `nextCursor === null`.
+- `GET /v1/conversations/:id` for own conversation → 200 `ConversationDetail` with `messages` array (ordered by sequence; `tokenCount` omitted for user messages). For a NON-existent id → 404 `not_found`. For ANOTHER user's conversation id → 404 `not_found` (SE8 — no cross-user read).
 - `PATCH /v1/conversations/:id { title: 'Trip planning' }` → 200; reloading shows the title; the row's `title_source === 'user'`.
 - `PATCH /v1/conversations/:id { status: 'archived' }` → 200; it disappears from `?status=active` and appears under `?status=archived`.
 - `PATCH` another user's conversation → 404 (no cross-user write).
@@ -438,41 +510,44 @@ apps/
 
 ---
 
-## Task 11: Import buffered guest conversation (§8.2 import, BE11/AU8/FR16) (TDD, supertest)
-**Implements:** `POST /v1/conversations/import` — persist a buffered guest conversation for the authed user, idempotent on an optional `clientConversationId`, with `title_source='default'` so Plan 5's auto-naming runs (BE11/AU8/FR16/A12). Wire shape EXACTLY PRD §8.2.
+## Task 11: Import buffered guest conversation (contract §2 import / RESOLUTION 7, BE11/AU8/FR16) (TDD, supertest)
+**Implements:** `POST /v1/conversations/import` — persist a buffered guest conversation for the authed user, idempotent on an optional `clientConversationId`, with `title_source='default'` so Plan 5's auto-naming runs (BE11/AU8/FR16/A12). Wire shape EXACTLY contract §2 (returns `ConversationDetail`). Request validation uses the shared `importConversationSchema`. **Idempotency uses the `conversations.client_conversation_id` column + partial-unique index from Task 8.5 (lookup-or-`onConflictDoNothing`) — NOT a hashed/derived primary key.** Depends on Task 8.5.
 **Files:**
-- Edit: `apps/api/src/conversations/validation.ts` — add the import body schema.
+- Edit: `apps/api/src/conversations/validation.ts` — re-export / wire the shared `importConversationSchema`.
 - Edit: `apps/api/src/conversations/repository.ts` — add `importConversation`.
 - Edit: `apps/api/src/routes/conversations.ts` — add the `POST /v1/conversations/import` route (behind `requireAuth`).
 - Test: `apps/api/test/import.int.test.ts`.
 **Design:**
 - **Signatures / types:**
   ```ts
-  interface ImportMessageInput { role: 'user'|'assistant'; content: string }
+  // Request validation = the shared importConversationSchema from @ollive/shared/api
+  // ({ clientConversationId?: string (1..200), messages: array(min 1) of { role:'user'|'assistant', content: string min 1 } }).
+  import type { ImportConversationBody, ConversationDetail } from '@ollive/shared/api';
   interface ImportConversationInput {
     userId: string;
     clientConversationId?: string;   // optional idempotency key (per user)
-    messages: ImportMessageInput[];
+    messages: ImportConversationBody['messages'];
     provider: string; model: string;
   }
   // added to ConversationRepository:
-  //   importConversation(input): Promise<ConversationWithMessagesDto>
+  //   importConversation(input): Promise<ConversationDetail>
   ```
-  Body schema (Zod): `{ clientConversationId?: string (1..200), messages: array(min 1) of { role: 'user'|'assistant', content: string min 1 } }`.
-- **Algorithm:** in a single transaction:
-  1. If `clientConversationId` is provided, look up an existing conversation for this `userId` whose stored `clientConversationId` matches (store the client key in a deterministic, queryable place — see decision below). If found → return it with its messages (idempotent; **no duplicate**).
-  2. Else insert a new `conversations` row (`title='New conversation'`, `title_source='default'`, `status='active'`, `provider`, `model`, and the `clientConversationId` recorded).
-  3. Insert each message with a monotonic `sequence` starting at 1, in array order, `status='complete'`, mapping `tokenCount` to null (not yet computed).
-  4. Return `toConversationWithMessagesDto`.
-  - **Idempotency storage decision:** the `conversations` table (PRD §10) has no `client_conversation_id` column and this plan must NOT modify `@ollive/db`. Store the client key in a deterministic, collision-safe **derived id**: compute the new conversation's primary key as a UUIDv5-style namespaced hash of `(userId, clientConversationId)` when the key is present, so a re-import with the same `(userId, clientConversationId)` produces the same target `id` and the insert is an idempotent upsert (`onConflictDoNothing` on the PK, then re-select). When `clientConversationId` is absent, use a random uuid (always a fresh conversation). This keeps idempotency server-enforced without a schema change. (Document this; a dedicated column is the cleaner long-term option but is out of scope here.)
-- **Patterns / decisions / edge cases:** transactional multi-row insert (conversation + its messages) keeps the imported exchange atomic. Idempotency is keyed on `(userId, clientConversationId)` so re-posting after a flaky network does not duplicate (the §8.2 requirement). `title_source='default'` is the signal Plan 5's auto-naming keys on (A12). Messages are validated (BE3); `system` role is rejected for import (guest exchanges are user/assistant only). User-scoped throughout (SE8).
+  Body schema (Zod): the shared `importConversationSchema` (do not redefine it locally).
+- **Algorithm:** in a single transaction, using the `client_conversation_id` column + partial-unique index from Task 8.5 (NO hashed/derived PK):
+  1. If `clientConversationId` is provided, **look up** an existing `conversations` row for this `userId` with `client_conversation_id = clientConversationId`. If found → return it with its messages (idempotent; **no duplicate, one row**).
+  2. Else insert a new `conversations` row with a **normal random PK** (`id` defaults via `defaultRandom()`), `title='New conversation'`, `title_source='default'`, `status='active'`, `provider`, `model`, and `client_conversation_id = clientConversationId` when provided (else `NULL`). Use `onConflictDoNothing()` targeting the partial-unique index `(user_id, client_conversation_id)` to absorb a concurrent duplicate insert; if the insert returned no row (conflict), re-select the existing row by `(userId, clientConversationId)` and return it.
+  3. Insert each message with a monotonic `sequence` starting at 1, in array order, `status='complete'`, `tokenCount` null (omitted in serialization).
+  4. Return `toConversationDetail(conv, msgs)`.
+  - **Idempotency storage (authoritative — contract §2 RESOLUTION 7):** dedup lives in the dedicated **nullable `conversations.client_conversation_id` column** with a **partial-unique index on `(user_id, client_conversation_id) WHERE client_conversation_id IS NOT NULL`** (added in Task 8.5). The conversation primary key is a **random UUID** — there is **no UUIDv5/derived/hashed PK** anywhere. A re-import of the same `(userId, clientConversationId)` resolves to the same row via lookup-or-`onConflictDoNothing`. When `clientConversationId` is omitted, the column is `NULL` and every import creates a fresh conversation (multiple NULLs allowed by the partial index — no dedup). The same key from a different user is a distinct conversation (the unique pair is per-user).
+- **Patterns / decisions / edge cases:** transactional multi-row insert (conversation + its messages) keeps the imported exchange atomic. Idempotency is keyed on the `(user_id, client_conversation_id)` partial-unique pair so re-posting after a flaky network does not duplicate (contract §2 requirement). `title_source='default'` is the signal Plan 5's auto-naming keys on (A12). Messages are validated by the shared schema (BE3); `system` role is rejected for import (guest exchanges are user/assistant only). User-scoped throughout (SE8). Provider/model come from config (`provider='google'`, `model=config.defaultModel`).
 **Test cases (write first, TDD — supertest, authed agent, real Postgres):**
-- `POST /v1/conversations/import` with two messages (user + assistant), no `clientConversationId` → 201 `ConversationWithMessagesDto`: server-assigned `id`, `title === 'New conversation'`, two messages with `sequence` 1 and 2 in order; owned by the caller. (Verify the row's `title_source === 'default'`.)
-- Idempotency: import twice with the SAME `clientConversationId` (and same user) → both responses have the SAME conversation `id`; exactly one conversation row and the messages are not duplicated.
+- `POST /v1/conversations/import` with two messages (user + assistant), no `clientConversationId` → 201 `ConversationDetail`: server-assigned random `id`, `title === 'New conversation'`, two messages with `sequence` 1 and 2 in order; owned by the caller. (Verify the row's `title_source === 'default'` and `client_conversation_id IS NULL`.)
+- Idempotency: import twice with the SAME `clientConversationId` (and same user) → both responses have the SAME conversation `id`; **exactly one conversation row** (assert the DB has one matching row) and the messages are not duplicated.
+- Two imports with NO `clientConversationId` (same user) → distinct conversation `id`s (no dedup; multiple NULLs allowed).
 - Different `clientConversationId` (same user) → distinct conversation `id`s.
-- Import WITHOUT a session cookie → 401.
-- Empty `messages` array → 400 `validation_error`.
-- A `clientConversationId` reused by a DIFFERENT user → creates a separate conversation (idempotency is per-user; no cross-user collision).
+- Import WITHOUT a session cookie → 401 `{ error: 'unauthorized' }`.
+- Empty `messages` array → 400 `validation_error`; a `system` role in `messages` → 400 `validation_error`.
+- A `clientConversationId` reused by a DIFFERENT user → creates a separate conversation (the partial-unique pair is per-user; no cross-user collision).
 **Done when:** `import` tests green (infra up) + `tsc --noEmit` clean. commit: `feat(api): add idempotent guest-conversation import endpoint`.
 
 ---
@@ -492,25 +567,30 @@ apps/
   WEB_ORIGIN=http://localhost:5173    # CORS allowlist + post-login redirect (SE4)
   GUEST_MESSAGE_LIMIT=2               # guest trial cap (A11/AU7)
   GUEST_SESSION_TTL=86400             # guest cookie + Redis counter TTL in seconds
+  DEFAULT_MODEL=gemini-2.5-flash      # provider model for new conversations + guest chat (A10; owned by Plan 4, read by Plan 5)
   ```
 **Design:**
 - **Algorithm:** documentation + a guarded one-line seed call (idempotent via Task 8). Seed failure logs a warning and does NOT crash startup (a transient DB hiccup shouldn't block the API; the next request through dev login re-upserts the same row).
 - **Patterns / decisions / edge cases:** seed-on-startup is the DE7 one-command-startup affordance; idempotent so restarts are safe. Env doc surface is DE5. The seed runs only in dev mode (in google mode users are created on real login).
 **Test cases (write first, TDD):** none new (covered by Task 8's seed idempotency unit + Task 9's dev-login flow). Verified by the full-suite gate.
-**Done when:** `pnpm exec vitest run --project api` passes ALL api tests (config, jwt, state, counter, users, auth, conversations, import) with Postgres + Redis up; `pnpm --filter @ollive/api exec tsc --noEmit` clean; `pnpm test` passes all projects. commit: `chore(api): seed demo user in dev mode and document auth env vars`.
+**Done when:** `pnpm exec vitest run --project api` passes ALL api tests (config, jwt, state, counter, users, auth, conversations, import) with Postgres + Redis up; the `@ollive/shared` api-schema tests (Task 1.5) and the `@ollive/db` migration test (Task 8.5) pass; `pnpm --filter @ollive/api exec tsc --noEmit` and `pnpm --filter @ollive/shared exec tsc --noEmit` clean; `pnpm test` passes all projects. commit: `chore(api): seed demo user in dev mode and document auth env vars`.
 
 ---
 
 ## Definition of Done
 
+- [ ] The `@ollive/shared/api` DTO module exists (`common`/`errors`/`auth`/`conversations`/`chat`/`metrics` + `api/index.ts`), is re-exported from `packages/shared/src/index.ts`, its schema tests pass, and `@ollive/shared` typechecks — all request validation/response typing in this plan imports from it (no ad-hoc shapes).
+- [ ] `@ollive/db` has the nullable `conversations.client_conversation_id` column + partial-unique index `(user_id, client_conversation_id) WHERE client_conversation_id IS NOT NULL`, with a generated migration that applies via `runMigrations`. The conversation PK remains a random UUID (NO hashed/derived PK).
 - [ ] `pnpm install` resolves the new `apps/api` deps (`jose`, `google-auth-library`, `cookie-parser`, `cors`, `@types/*`).
-- [ ] `pnpm --filter @ollive/api exec tsc --noEmit` passes.
+- [ ] `pnpm --filter @ollive/api exec tsc --noEmit` and `pnpm --filter @ollive/shared exec tsc --noEmit` pass.
 - [ ] `pnpm exec vitest run --project api` passes (config, jwt, state, counter, users, auth, conversations, import) with Postgres + Redis running.
 - [ ] `pnpm test` passes all projects (with Postgres + Redis up).
+- [ ] `DEFAULT_MODEL` is owned by Plan 4's config (default `gemini-2.5-flash`); new conversations use `provider='google'`/`model=config.defaultModel`; Plan 5 only reads it.
+- [ ] The conversation list returns `{ items: ConversationSummary[], nextCursor: string | null }` (no messages / no `title_source` on items; limit default 20 / max 100); detail returns `ConversationDetail` with `messages`.
 - [ ] Dev-mode login flow works end-to-end via supertest (`/auth/google` → `/auth/google/callback?code=dev` → session cookie → `/auth/me` 200).
 - [ ] `GET /v1/session` never returns 401 (guest branch when unauthenticated, user branch when authenticated).
 - [ ] Cross-user access is impossible: another user's conversation id returns 404 on GET and PATCH (SE8).
-- [ ] Import is idempotent on `(userId, clientConversationId)` and sets `title_source='default'`.
+- [ ] Import is idempotent on the `(user_id, client_conversation_id)` partial-unique index (column approach, random PK — no hashed PK) and sets `title_source='default'`; re-import of the same key yields one row.
 - [ ] Rename sets `title_source='user'`; archive moves a conversation between `?status=` filters.
 - [ ] Guest cap is enforced server-side via the Redis counter; `readGuestRemaining` does not consume the trial.
 - [ ] No real Google network call occurs in any test (dev provider real; Google provider injected as a fake).
@@ -520,6 +600,12 @@ apps/
 
 | Requirement | Where |
 |---|---|
+| `docs/API-CONTRACTS.md` §8 — shared `@ollive/shared/api` DTO module (NFR7) | Task 1.5 |
+| `docs/API-CONTRACTS.md` §1 — Auth & Session contract | Task 9 |
+| `docs/API-CONTRACTS.md` §2 — Conversations (incl. import) contract | Tasks 10, 11 |
+| `docs/API-CONTRACTS.md` §7 — error catalog (incl. `rate_limited` 429) | Tasks 1.5 (catalog), 7 (IP limiter), 9–11 (route errors) |
+| A10 — `DEFAULT_MODEL` owned by API config | Task 1 (added; Plan 5 only reads) |
+| RESOLUTION 7 — `conversations.client_conversation_id` column + partial-unique index migration | Task 8.5 |
 | A5 / AU4 / S1 — `AUTH_MODE` dev bypass + seeded demo user | Tasks 1, 4 (DevAuthProvider), 8 (seed), 12 (startup seed) |
 | A11 / AU7 / SE10 — guest trial, server-enforced cap | Tasks 1 (vars), 6 (counter), 7 (guest middleware) |
 | A12 — `title_source` provenance (default/user) | Tasks 10 (rename → user), 11 (import → default) |
@@ -527,15 +613,15 @@ apps/
 | FR15 / FR16 / AU8 — guest cap + import-on-login | Tasks 6, 7, 11 |
 | FR1 / FR5 / FR6 / FR7 — create/list/resume/rename+archive | Task 10 |
 | §7.1 / §7.4 — anonymous→import flow; list & resume | Tasks 9 (session), 10 (list/get), 11 (import) |
-| §8.1 — auth contracts (google/callback/logout/me/session) | Task 9 |
-| §8.2 — conversations contracts incl. import | Tasks 10, 11 |
-| §10 — use existing `users`/`conversations`/`messages` tables | Tasks 8, 10, 11 |
+| §8.1 / contract §1 — auth contracts (google/callback/logout/me/session) | Task 9 |
+| §8.2 / contract §2 — conversations contracts incl. import | Tasks 10, 11 |
+| §10 — use existing `users`/`conversations`/`messages` tables (+ Task 8.5 additive column) | Tasks 8, 8.5, 10, 11 |
 | BE1 — domain-split routers (`auth`, `conversations`) | Tasks 9, 10, 11 |
-| BE3 — Zod validation, 400 with details | Tasks 1, 10, 11 |
+| BE3 — Zod validation (shared `@ollive/shared/api` schemas), 400 with details | Tasks 1.5, 10, 11 |
 | BE8 — pino + correlation id + CORS | Task 2 (CORS; pino/correlation inherited from Plan 3) |
 | BE9 — single shared Redis client | Tasks 6, 9 (inject `deps.redis`) |
 | BE10 — guest cookie + Redis cap + 403 path | Tasks 6, 7 (Plan 5 calls `checkAndIncrementGuest`) |
-| BE11 — import persists buffered conversation, triggers naming | Task 11 (`title_source='default'`) |
+| BE11 — import persists buffered conversation, triggers naming, idempotent on client key | Tasks 8.5 (column + index), 11 (`title_source='default'`) |
 | AU1 — `AuthProvider` abstraction | Task 4 |
 | AU2 — upsert by `google_sub`, stateless JWT cookie | Tasks 3, 8, 9 |
 | AU3 — auth middleware → 401 | Task 5 |
@@ -546,4 +632,4 @@ apps/
 | SE9 / S4 — simple in-memory IP rate limiter | Task 7 |
 | SE10 — server-side guest cap (Redis), not client-trusted | Tasks 6, 7 |
 
-This plan is consumed by Plan 5 (Chat & Metrics — mounts the chat (SSE) + metrics routers in the same `createApp` factory, imports `requireAuth`/`guestSession`/`checkAndIncrementGuest`/`readGuestRemaining` and the §8.2 serializers, and persists streamed messages into the conversations created/imported here) and Plan 7 (Deployment — `AUTH_MODE`, `JWT_SECRET`, `WEB_ORIGIN`, and the `GOOGLE_*`/`GUEST_*` vars are wired into compose env).
+This plan is consumed by Plan 5 (Chat & Metrics — mounts the chat (SSE) + metrics routers in the same `createApp` factory; imports `requireAuth`/`guestSession`/`checkAndIncrementGuest`/`readGuestRemaining`, the contract §2 serializers (`toMessage`), and the chat/metrics request schemas + SSE/response types from the `@ollive/shared/api` module created here in Task 1.5; reads `config.defaultModel` (does NOT re-add `DEFAULT_MODEL`); and persists streamed messages into the conversations created/imported here) and Plan 6 (frontend — imports the `@ollive/shared/api` response/request types) and Plan 7 (Deployment — `AUTH_MODE`, `JWT_SECRET`, `WEB_ORIGIN`, `DEFAULT_MODEL`, and the `GOOGLE_*`/`GUEST_*` vars are wired into compose env).

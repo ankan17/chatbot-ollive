@@ -6,6 +6,8 @@
 >
 > **Commit convention:** every commit message in this plan must end with the trailer:
 > `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+>
+> **Authoritative contract:** `docs/API-CONTRACTS.md` is the single source of truth for the chat SSE events, guest chat, and the metrics shapes implemented here. **Where this plan and that document disagree, the document wins.** The chat/metrics **request schemas** and **response types** come from the shared `@ollive/shared/api` module (added in Plan 4, §8 of the contract) — this plan **imports** them (`chatMessageSchema`, `guestMessageSchema`, `metricsQuerySchema`; `SseEvent`/`SseStartData`/`SseTokenData`/`SseDoneData`/`SseErrorData`; `OverviewMetrics`, `LatencySeries`/`ThroughputSeries`/`ErrorSeries`/`TokenSeries` and their point types; `AppErrorCode`/`SseErrorCode`/`ApiErrorBody`) and **never redefines them**. Error codes are the catalog in §7 of the contract — reference it, do not invent shapes.
 
 **Goal:** Extend `apps/api` (Plans 3 & 4) with the chat product surface — SSE-streamed multi-turn chat (`POST /v1/conversations/:id/messages`), client-abort cancellation with partial-save, token-budget context windowing, no-persistence guest chat (`POST /v1/guest/messages`), async LLM auto-naming of conversations — and the metrics surface (`GET /v1/metrics/{overview,latency,throughput,errors,tokens}`) computed as SQL aggregations over `inference_logs`, all scoped to the authenticated user. Every LLM call flows through the Plan 2 SDK so it self-instruments into the Plan 3 ingestion pipeline; the chat path never blocks on telemetry.
 
@@ -22,7 +24,7 @@ References (PRD): §3 (A3 token-budget window, A4 cancel=abort, A10 default mode
 > - **Plan 3 (`apps/api`):** `createApp({ db, redis, config })`; `loadConfig(env?)`; `AppError(code, message, details?, status?)` + `errorHandler(logger)`; mount new routers at the `// FUTURE (Plans 4/5)` extension point in `src/app.ts`; `INGESTION_API_KEY` already in config. Error codes already include `validation_error|unauthorized|not_found|login_required|internal_error`.
 > - **Plan 4 (`apps/api`, drafted in parallel — rely on these PINNED shapes):** `requireAuth(deps): RequestHandler` sets `req.user: { id: string; email: string; name?: string; avatarUrl?: string }` (else 401 `unauthorized`). `guestSession(deps): RequestHandler` sets `req.guest: { id: string }` (issues/verifies the signed httpOnly guest cookie). `checkAndIncrementGuest(redis, guestId, limit, ttl): Promise<{ allowed: boolean; remaining: number }>` enforces the cap. Conversation/message rows are `@ollive/db`'s `conversations`/`messages`; `GUEST_MESSAGE_LIMIT` / `GUEST_SESSION_TTL` config keys exist (Plan 4 owns them).
 > - **`@ollive/db`:** `Db` type; tables `conversations` (cols `id, userId, title, titleSource, status, provider, model, createdAt, updatedAt`), `messages` (cols `id, conversationId, role, content, tokenCount, sequence, status, createdAt`), `inferenceLogs` (cols per PRD §10/§16.1). Import tables/`Db` from `@ollive/db`, never redefine.
-> - **`@ollive/shared`:** `Usage`, `InferenceLog`, `PREVIEW_MAX_CHARS`, `messageRole`, `conversationStatus`.
+> - **`@ollive/shared`:** `Usage`, `InferenceLog`, `PREVIEW_MAX_CHARS`, `messageRole`, `conversationStatus`. Plus the **`@ollive/shared/api`** sub-module (added in Plan 4, API-CONTRACTS.md §8) — the authoritative request schemas + response/SSE types this plan imports: `chatMessageSchema`/`ChatMessageBody`, `guestMessageSchema`/`GuestMessageBody`, `metricsQuerySchema`/`MetricsQuery`/`MetricsBucket`; `SseEvent`/`SseStartData`/`SseTokenData`/`SseDoneData`/`SseErrorData`/`SseErrorCode`; `OverviewMetrics`, `LatencySeries`/`ThroughputSeries`/`ErrorSeries`/`TokenSeries` + their point types; `AppErrorCode`/`ApiErrorBody`. **Import — never redefine.**
 
 ---
 
@@ -31,7 +33,7 @@ References (PRD): §3 (A3 token-budget window, A4 cancel=abort, A10 default mode
 ```
 apps/api/
   src/
-    config.ts                       # EDIT: add chat config (GEMINI_API_KEY, DEFAULT_MODEL, CONTEXT_TOKEN_BUDGET, PII_REDACTION)
+    config.ts                       # EDIT: add chat config (GEMINI_API_KEY, CONTEXT_TOKEN_BUDGET, PII_REDACTION). DEFAULT_MODEL owned by Plan 4 — READ config.defaultModel here.
     app.ts                          # EDIT: AppDeps += chatProvider; mount chatRouter, guestChatRouter, metricsRouter at the FUTURE point
     server.ts                       # EDIT: build instrumented chatProvider via withLoggingTransport + inject; close transport on shutdown
     chat/
@@ -45,7 +47,7 @@ apps/api/
       metrics.ts                    # metricsRouter: GET /metrics/{overview,latency,throughput,errors,tokens} (BE7/§8.5/SE8)
     metrics/
       sql.ts                        # parameterized Drizzle SQL builders (percentile/bucket/error/token/throughput)
-      params.ts                     # Zod parse of from/to/provider/model/bucket query params
+      params.ts                     # parse query params via the shared `metricsQuerySchema` (from/to/provider/model/bucket); injects userId
   test/
     tokens.test.ts                  # unit: estimateTokens + buildContext budgeting
     sse.test.ts                     # unit: SSE frame formatting + heartbeat
@@ -61,34 +63,33 @@ apps/api/
 ---
 
 ## Task 1: Config extension — chat env vars (TDD)
-**Implements:** the chat-path config surface (DE5 partial): `GEMINI_API_KEY`, `DEFAULT_MODEL` (A10), `CONTEXT_TOKEN_BUDGET` (A3/BE5), `PII_REDACTION` (SDK9). Extends Plan 3's `loadConfig` schema at its documented single extension point.
+**Implements:** the chat-path config surface (DE5 partial): `GEMINI_API_KEY`, `CONTEXT_TOKEN_BUDGET` (A3/BE5), `PII_REDACTION` (SDK9). Extends Plan 3's `loadConfig` schema at its documented single extension point. **`DEFAULT_MODEL` is owned by Plan 4** (`config.defaultModel`, default `'gemini-2.5-flash'`, A10 — see API-CONTRACTS.md §"How to read"); this plan **does not add it** — it **reads** `config.defaultModel` (already present from Plan 4) where guest chat needs it (Task 7).
 **Files:**
-- Edit: `apps/api/src/config.ts` — add the four keys to the Zod env schema + `AppConfig`.
+- Edit: `apps/api/src/config.ts` — add the three chat keys to the Zod env schema + `AppConfig`.
 - Test: `apps/api/test/config.test.ts` — extend Plan 3's existing config test (one-line: add cases for the new keys).
 
 **Design:**
-- **Signatures / types:** extend the existing `AppConfig` (do not redefine the Plan 3 fields):
+- **Signatures / types:** extend the existing `AppConfig` (do not redefine the Plan 3/Plan 4 fields):
   ```ts
   interface AppConfig {
     // ...Plan 3 fields: port, databaseUrl, redisUrl, ingestionApiKey, ingestionStreamMaxLen
-    // ...Plan 4 fields: jwtSecret, webOrigin, authMode, guestMessageLimit, guestSessionTtl (owned by Plan 4)
+    // ...Plan 4 fields: jwtSecret, webOrigin, authMode, guestMessageLimit, guestSessionTtl, defaultModel (owned by Plan 4 — A10)
     geminiApiKey: string;            // GEMINI_API_KEY — required (no runtime mock provider)
-    defaultModel: string;            // DEFAULT_MODEL — default 'gemini-2.5-flash'
     contextTokenBudget: number;      // CONTEXT_TOKEN_BUDGET — default 4000
     piiRedaction: 'off' | 'pattern' | 'llm'; // PII_REDACTION — default 'pattern'
   }
   ```
-- **Algorithm:** add to the Zod `envSchema`: `GEMINI_API_KEY: z.string().min(1)`; `DEFAULT_MODEL: z.string().default('gemini-2.5-flash')`; `CONTEXT_TOKEN_BUDGET: z.coerce.number().int().positive().default(4000)`; `PII_REDACTION: z.enum(['off','pattern','llm']).default('pattern')`. Map into `AppConfig`. Reuse the existing fail-fast aggregation (one Error listing every offending `path: message`).
-- **Patterns / decisions / edge cases:** typed-config + fail-fast, identical to Plan 3. `GEMINI_API_KEY` is **required** even though tests inject a fake provider — the production wiring needs it and a missing key must fail at startup, not mid-request. Tests that build `loadConfig` supply a dummy `GEMINI_API_KEY` in their env fixture; the fake provider never reads it.
+- **Algorithm:** add to the Zod `envSchema`: `GEMINI_API_KEY: z.string().min(1)`; `CONTEXT_TOKEN_BUDGET: z.coerce.number().int().positive().default(4000)`; `PII_REDACTION: z.enum(['off','pattern','llm']).default('pattern')`. Map into `AppConfig`. Do **not** add `DEFAULT_MODEL` (Plan 4 already declares it; adding it here would duplicate the key — see the cross-plan risk note). Reuse the existing fail-fast aggregation (one Error listing every offending `path: message`).
+- **Patterns / decisions / edge cases:** typed-config + fail-fast, identical to Plan 3. `GEMINI_API_KEY` is **required** even though tests inject a fake provider — the production wiring needs it and a missing key must fail at startup, not mid-request. Tests that build `loadConfig` supply a dummy `GEMINI_API_KEY` in their env fixture; the fake provider never reads it. `defaultModel` is assumed present from Plan 4; this plan only consumes it.
 
 **Test cases (write first, TDD):**
-- Valid env including the four new keys → `geminiApiKey` passed through, `defaultModel`/`contextTokenBudget`/`piiRedaction` mapped.
-- Missing `DEFAULT_MODEL`/`CONTEXT_TOKEN_BUDGET`/`PII_REDACTION` → defaults `'gemini-2.5-flash'`, `4000`, `'pattern'`.
+- Valid env including the three new keys → `geminiApiKey` passed through, `contextTokenBudget`/`piiRedaction` mapped.
+- Missing `CONTEXT_TOKEN_BUDGET`/`PII_REDACTION` → defaults `4000`, `'pattern'`.
 - `CONTEXT_TOKEN_BUDGET='8000'` → coerced number `8000`.
 - Missing `GEMINI_API_KEY` → throws, message mentions `GEMINI_API_KEY`.
 - `PII_REDACTION='bogus'` → throws (enum violation).
 
-**Done when:** config test cases green + `pnpm --filter @ollive/api exec tsc --noEmit` clean; commit `feat(api): add chat config (gemini key, default model, context budget, redaction)`.
+**Done when:** config test cases green + `pnpm --filter @ollive/api exec tsc --noEmit` clean; commit `feat(api): add chat config (gemini key, context budget, redaction)`.
 
 ---
 
@@ -143,20 +144,20 @@ apps/api/
 - Test: `apps/api/test/sse.test.ts`.
 
 **Design:**
-- **Signatures / types:**
+- **Signatures / types:** the four payload shapes are **imported from `@ollive/shared/api`**, NOT redefined here (RESOLUTION 4 / contract §3, §8). Note `SseDoneData.usage` is `Usage` (**always present** on `done` — never `null`) and `SseErrorData.code` is the `SseErrorCode` union (`rate_limited | provider_timeout | provider_error | internal_error`):
   ```ts
   import type { Response } from 'express';
-  import type { Usage } from '@ollive/shared';
-
-  interface SseStartData { messageId: string | null; requestId: string; }
-  interface SseTokenData { delta: string; }
-  interface SseDoneData  { messageId: string | null; finishReason: string; usage: Usage | null; }
-  interface SseErrorData { code: string; message: string; }
+  import type {
+    SseStartData,   // { messageId: string | null; requestId: string }
+    SseTokenData,   // { delta: string }
+    SseDoneData,    // { messageId: string | null; finishReason: string; usage: Usage }  ← usage ALWAYS present
+    SseErrorData,   // { code: SseErrorCode; message: string }
+  } from '@ollive/shared/api';
 
   interface SseStream {
     start(data: SseStartData): void;
     token(data: SseTokenData): void;
-    done(data: SseDoneData): void;
+    done(data: SseDoneData): void;     // usage is required by the type — never call with a null usage
     error(data: SseErrorData): void;
     close(): void;            // ends the response + clears heartbeat
     readonly ended: boolean;
@@ -204,11 +205,12 @@ apps/api/
 - Test: covered by the chat/guest integration suites (Tasks 5, 6); this task ends with `tsc --noEmit` + the fakes compiling. (The engine is exercised end-to-end through real routes, not in isolation, to avoid a redundant mock-Response harness.)
 
 **Design:**
-- **Signatures / types:**
+- **Signatures / types:** `mapProviderError` returns the shared **`SseErrorCode`** union (from `@ollive/shared/api`, contract §7 SSE catalog) — do not declare a local code union:
   ```ts
   import type { Request, Response } from 'express';
   import type { LLMProvider, ChatRequest, CallContext } from '@ollive/llm-sdk';
   import type { Usage } from '@ollive/shared';
+  import type { SseErrorCode } from '@ollive/shared/api';
 
   interface RunChatArgs {
     req: Request;
@@ -219,15 +221,15 @@ apps/api/
     messageId: string | null;       // assistant messageId for SSE start/done (null for guest)
     requestId: string;              // surfaced in SSE start; SDK generates its OWN id for the log
     onDelta?(accumulated: string): void;          // optional progress hook (unused by guest)
-    onComplete(result: { content: string; usage: Usage | null; finishReason: string }): Promise<void>;
+    onComplete(result: { content: string; usage: Usage; finishReason: string }): Promise<void>;
     onCancel(result: { content: string }): Promise<void>;
-    onError(result: { content: string; code: string; message: string }): Promise<void>;
+    onError(result: { content: string; code: SseErrorCode; message: string }): Promise<void>;
   }
 
   function runChatStream(args: RunChatArgs): Promise<void>;
-  // internal: mapProviderError(err) → { code: ErrorSseCode; message: string }
-  type ErrorSseCode = 'rate_limited' | 'provider_timeout' | 'provider_error' | 'internal_error';
+  // internal: mapProviderError(err) → { code: SseErrorCode; message: string }
   ```
+  **`done.usage` is non-nullable per the contract** (§3 — `usage` is ALWAYS present on `done`). The provider stream may omit `usage`; the engine **normalizes a missing usage to a zeroed `Usage`** (`{ promptTokens: 0, completionTokens: 0, totalTokens: 0 }`) so both `onComplete` and `sse.done` always receive a concrete `Usage` object — there is no `done` with a null usage anywhere.
   `FakeChatProvider` (test/fakes.ts) — `implements LLMProvider`, constructed with `{ name?, deltas: string[], usage?: Usage, finishReason?, delayMs?, throwAfter?, throwError?, abortAfter? }`. Its `streamChat(req, { signal })` async-generator yields `{ delta }` per scripted delta (optional `delayMs` before the first → measurable TTFT), then a final `{ usage, finishReason }`; throws `throwError` after `throwAfter` deltas; throws an `Error` with `name==='AbortError'` if `signal.aborted` or after `abortAfter` deltas. Never calls a real model. (Mirrors the Plan 2 SDK fake.)
 - **Algorithm:** (pseudocode)
   ```
@@ -235,31 +237,33 @@ apps/api/
   const ac = new AbortController();
   let cancelled = false;
   req.on('close', () => { if (!sse.ended) { cancelled = true; ac.abort(); } }); // ST4
-  sse.start({ messageId, requestId });
+  sse.start({ messageId, requestId });                            // start { messageId, requestId } — contract §3
   let content = '';
   try {
     let usage = null, finishReason = 'stop';
     for await (const chunk of provider.streamChat(chatRequest, { signal: ac.signal, context })) {
-      if (chunk.delta) { content += chunk.delta; sse.token({ delta: chunk.delta }); onDelta?.(content); }
+      if (chunk.delta) { content += chunk.delta; sse.token({ delta: chunk.delta }); onDelta?.(content); }  // token { delta }
       if (chunk.usage) usage = chunk.usage;
       if (chunk.finishReason) finishReason = chunk.finishReason;
     }
-    await onComplete({ content, usage, finishReason });          // persist BEFORE done
-    sse.done({ messageId, finishReason, usage });
+    const finalUsage = usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 };  // contract §3: done.usage ALWAYS present
+    await onComplete({ content, usage: finalUsage, finishReason });   // persist BEFORE done
+    sse.done({ messageId, finishReason, usage: finalUsage });          // done { messageId, finishReason, usage } — usage non-null
   } catch (err) {
     if (cancelled || err.name === 'AbortError' || ac.signal.aborted) {
-      await onCancel({ content });                                // save partial; NO SSE error event (client already gone)
+      // CANCEL (contract §3 / RESOLUTION 4): stream simply closes — NO done event, NO error event (socket already gone)
+      await onCancel({ content });                                // persist partial (status='partial')
     } else {
-      const { code, message } = mapProviderError(err);            // §18 mapping
-      await onError({ content, code, message });
-      if (!sse.ended) sse.error({ code, message });               // ST6
+      const { code, message } = mapProviderError(err);            // SSE error catalog (contract §7)
+      await onError({ content, code, message });                  // persist partial (status='error')
+      if (!sse.ended) sse.error({ code, message });               // error { code, message } — ST6
     }
   } finally {
     sse.close();
   }
   ```
-  `mapProviderError` (§18): an error whose message/name signals a 429/"rate limit"/"resource exhausted" → `rate_limited`; timeout/deadline/`ETIMEDOUT` → `provider_timeout`; anything else from the provider → `provider_error`; a non-provider/internal failure → `internal_error`. Raw provider text is **not** forwarded — a friendly `message` is sent; full detail lives in the SDK log only.
-- **Patterns / decisions / edge cases:** template-method/strategy via the three `on*` callbacks keeps the engine free of persistence concerns so chat and guest reuse it verbatim (DRY). The SDK owns log status classification — the engine never calls a sink; it just drives the provider and the SSE. **Cancel detection** is the response `close` event firing the `AbortController`; the SDK sees the `AbortError` from the same signal and logs `cancelled`, while `onCancel` persists the partial. On cancel we do **not** emit an SSE `error` (the socket is already closing). `onComplete` runs **before** `sse.done` so a client that acts on `done` (e.g. refetch title) sees a consistent DB. `onError`/`onCancel` are awaited but their own failures are swallowed in `finally` so the stream always closes (chat never wedges). Edge case: zero deltas then a clean finish → empty `content`, still `onComplete` + `done`.
+  `mapProviderError` (SSE error catalog — contract §7): an error whose message/name signals a 429/"rate limit"/"resource exhausted" → `rate_limited`; timeout/deadline/`ETIMEDOUT` → `provider_timeout`; anything else from the provider → `provider_error`; a non-provider/internal failure → `internal_error`. These are exactly the four `SseErrorCode` values. Raw provider text is **not** forwarded — a friendly `message` is sent; full detail lives in the SDK log only.
+- **Patterns / decisions / edge cases:** template-method/strategy via the three `on*` callbacks keeps the engine free of persistence concerns so chat and guest reuse it verbatim (DRY). The SDK owns log status classification — the engine never calls a sink; it just drives the provider and the SSE. **Cancel detection** is the response `close` event firing the `AbortController`; the SDK sees the `AbortError` from the same signal and logs `cancelled`, while `onCancel` persists the partial. On cancel we emit **neither** a `done` nor an `error` event — the stream simply closes (contract §3 / RESOLUTION 4); the socket is already gone. `onComplete` runs **before** `sse.done` so a client that acts on `done` (e.g. refetch title) sees a consistent DB. `onError`/`onCancel` are awaited but their own failures are swallowed in `finally` so the stream always closes (chat never wedges). Edge case: zero deltas then a clean finish → empty `content`, still `onComplete` + `done` (with the zeroed-`usage` fallback if the provider emitted none — `done.usage` is never null).
 
 **Test cases (write first, TDD):** none in isolation — fully exercised by Tasks 5 & 6 (event sequence, cancel-partial, mid-stream error, no-real-Gemini). This task's gate is `tsc --noEmit` clean and `FakeChatProvider` compiling against the `LLMProvider` interface.
 
@@ -325,15 +329,14 @@ apps/api/
     chatProvider: LLMProvider;       // injected instrumented provider (prod) OR FakeChatProvider (tests)
   }
 
-  // routes/chat.ts
+  // routes/chat.ts — import the request schema from the shared module; do NOT redefine it
+  import { chatMessageSchema, type ChatMessageBody } from '@ollive/shared/api'; // { content: string (non-empty) } — contract §3
   interface ChatRouterDeps { db: Db; config: AppConfig; chatProvider: LLMProvider; logger?: Logger; }
   function chatRouter(deps: ChatRouterDeps): Router; // POST /:id/messages (mounted at /v1/conversations)
-
-  const chatBodySchema = z.object({ content: z.string().min(1) }); // §8.3
   ```
 - **Algorithm:** route handler (after `requireAuth` set `req.user`):
   ```
-  body = chatBodySchema.parse(req.body)                       // 400 validation_error on fail (BE3)
+  body = chatMessageSchema.parse(req.body)                    // shared schema; 400 validation_error on fail (BE3)
   conv = SELECT * FROM conversations WHERE id=:id AND user_id=req.user.id   // SE8
   if (!conv) throw AppError('not_found')                      // 404 — also covers not-owned (no leak)
   history = SELECT role,content FROM messages WHERE conversation_id=:id ORDER BY sequence
@@ -351,8 +354,8 @@ apps/api/
   await runChatStream({
     req, res, provider: deps.chatProvider, chatRequest, context: callContext,
     messageId: asstMsg.id, requestId,
-    onComplete: ({content, usage, finishReason}) =>
-      UPDATE messages SET content, token_count = usage?.completionTokens ?? estimateTokens(content),
+    onComplete: ({content, usage, finishReason}) =>   // usage is a concrete Usage (engine normalizes; never null)
+      UPDATE messages SET content, token_count = usage.completionTokens || estimateTokens(content),
              status='complete' WHERE id=asstMsg.id;
       UPDATE conversations SET updated_at=now() WHERE id=conv.id;
       if (isFirstResponse) maybeAutoName({db, provider, model: conv.model, logger}, conv.id);  // fire-and-forget
@@ -361,15 +364,16 @@ apps/api/
   })
   ```
   `RESERVE` (response headroom) is a module constant (e.g. `1024`) subtracted from the budget per A3/BE5.
-- **Patterns / decisions / edge cases:** request validation (BE3) before any write; ownership scoping returns `404 not_found` for both unknown and not-owned conversations (no existence leak, SE8/§18). User + pre-created assistant messages are inserted in one transaction so the `(conversation_id, sequence)` unique constraint can't interleave with a concurrent turn; the assistant row starts `status='partial'` and is promoted to `complete` only on success (so a dropped connection leaves a truthful `partial`). `isFirstResponse` is computed from `maxSeq===0` (turn 1) so auto-naming fires exactly once. The SDK generates its own log `requestId`; the SSE `requestId` here is a separate correlation value surfaced to the client. The route never awaits telemetry (the injected provider is already instrumented; logging is fire-and-forget inside the SDK). `token_count` prefers the provider's `usage.completionTokens`, falling back to `estimateTokens(content)` for cancel/partial.
+- **Patterns / decisions / edge cases:** request validation (BE3) before any write; ownership scoping returns `404 not_found` for both unknown and not-owned conversations (no existence leak, SE8/§18). User + pre-created assistant messages are inserted in one transaction so the `(conversation_id, sequence)` unique constraint can't interleave with a concurrent turn; the assistant row starts `status='partial'` and is promoted to `complete` only on success (so a dropped connection leaves a truthful `partial`). `isFirstResponse` is computed from `maxSeq===0` (turn 1) so auto-naming fires exactly once. The SDK generates its own log `requestId`; the SSE `requestId` here is a separate correlation value surfaced to the client. The route never awaits telemetry (the injected provider is already instrumented; logging is fire-and-forget inside the SDK). `token_count` prefers the provider's `usage.completionTokens` (always present on the `done` path — the engine guarantees a non-null `Usage`, zeroed if the provider emitted none), falling back to `estimateTokens(content)` when that value is `0`/absent and for cancel/partial.
 
 **Test cases (write first, TDD — supertest, real Postgres, `FakeChatProvider` injected via `createApp({...deps, chatProvider})`; auth stubbed so `req.user` is a seeded user; `afterEach` truncates messages/conversations):**
-- happy path → response is `text/event-stream`; the raw body parses into the ordered event sequence `start` → one or more `token` (deltas concatenate to the scripted reply) → `done` (with `finishReason='stop'` and the scripted `usage`); the `messages` table has the user row (`status='complete'`) and the assistant row updated to `content`=full reply, `status='complete'`, `token_count` set; `conversations.updated_at` advanced; **no real Gemini call** (fake provider only).
+- happy path → response is `text/event-stream`; the raw body parses into the ordered event sequence `start` (`{ messageId, requestId }`, `messageId` = the pre-created assistant row id) → one or more `token` (`{ delta }`, deltas concatenate to the scripted reply) → `done` (`{ messageId, finishReason: 'stop', usage }` where **`usage` is present and non-null** — the scripted `{ promptTokens, completionTokens, totalTokens }`); the `messages` table has the user row (`status='complete'`) and the assistant row updated to `content`=full reply, `status='complete'`, `token_count` set; `conversations.updated_at` advanced; **no real Gemini call** (fake provider only).
+- done.usage always present → even when the `FakeChatProvider` is scripted to emit **no** usage chunk, the `done` event still carries a `usage` object (zeroed) — there is never a `done` with a null/absent usage (contract §3).
 - sequence numbering → after two turns, message sequences are `1,2,3,4` with no gaps/dupes (the unique constraint held).
 - not-owned / unknown conversation → `404 { error: 'not_found' }`; no message rows written.
 - validation → empty `content` → `400 { error: 'validation_error' }`; nothing written.
-- cancel (ST4) → with a `FakeChatProvider` set to `abortAfter: 1` and the supertest client aborting the request after the first token, the assistant row ends `status='partial'` with the partial content saved; no `error` event was emitted; (the SDK would log `cancelled` — not asserted here, that is Plan 3's pipeline).
-- mid-stream error (ST6) → `FakeChatProvider` throwing a rate-limit error after 1 delta → the stream emits an `error` event with `code='rate_limited'`; assistant row ends `status='error'` with the partial content; stream closed cleanly (no hang).
+- cancel (ST4 / contract §3) → with a `FakeChatProvider` set to `abortAfter: 1` and the supertest client aborting the request after the first token, the assistant row ends `status='partial'` with the partial content saved; the stream simply closed — **no `done` event and no `error` event** were emitted; (the SDK would log `cancelled` — not asserted here, that is Plan 3's pipeline).
+- mid-stream error (ST6 / SSE catalog §7) → `FakeChatProvider` throwing a rate-limit error after 1 delta → the stream emits an `error` event with `code='rate_limited'` and a friendly `message` (one of the `SseErrorCode` values; no `done` event); assistant row ends `status='error'` with the partial content; stream closed cleanly (no hang).
 - auto-naming (BE12) → first response on a `title_source='default'` conversation → after the stream, the conversation `title` equals the fake-provider title-generation reply (cleaned) and `title_source='auto'`; a `title_source='user'` conversation is left unchanged (FR18); a title-generation throw leaves `title='New conversation'`/`'default'` and the main stream still succeeded (FR17).
 
 **Done when:** chat integration cases green against real Postgres + `tsc --noEmit` clean; commit `feat(api): add streaming chat endpoint with persistence, cancel, and auto-naming`.
@@ -384,31 +388,27 @@ apps/api/
 - Test: `apps/api/test/guest.int.test.ts` (supertest + real Redis; inject `FakeChatProvider`).
 
 **Design:**
-- **Signatures / types:**
+- **Signatures / types:** import the request schema from the shared module; do NOT redefine the bounded-history shape:
   ```ts
+  import { guestMessageSchema, type GuestMessageBody } from '@ollive/shared/api';
+  // contract §3 / §8: { messages: { role: 'user'|'assistant'; content: string }[] (bounded, .max(50)); content: string (non-empty) }
   interface GuestRouterDeps { redis: Redis; config: AppConfig; chatProvider: LLMProvider; logger?: Logger; }
   function guestChatRouter(deps: GuestRouterDeps): Router; // POST /messages (mounted at /v1/guest), behind guestSession
-
-  // §8.3: history the client holds locally, plus the new user message
-  const guestBodySchema = z.object({
-    messages: z.array(z.object({ role: z.enum(['user','assistant']), content: z.string() })).max(?), // bounded
-    content: z.string().min(1),
-  });
   ```
-  403 wire shape reproduced verbatim (PRD §8.3):
+  403 wire shape reproduced verbatim (contract §3 / §7 — the one HTTP error carrying an extra `remaining` field):
   ```json
   { "error": "login_required", "remaining": 0 }
   ```
 - **Algorithm:** route handler (after `guestSession` set `req.guest`):
   ```
-  body = guestBodySchema.parse(req.body)                                  // 400 on fail
+  body = guestMessageSchema.parse(req.body)                               // shared schema; 400 on fail
   { allowed, remaining } = await checkAndIncrementGuest(redis, req.guest.id,
                               config.guestMessageLimit, config.guestSessionTtl)
-  if (!allowed) return res.status(403).json({ error: 'login_required', remaining })   // §18, NOT an AppError (custom body w/ remaining)
+  if (!allowed) return res.status(403).json({ error: 'login_required', remaining })   // contract §3/§7, NOT an AppError (custom body w/ remaining)
   requestId = randomUUID()
   ctx = buildContext([...body.messages, {role:'user',content:body.content}],
                      config.contextTokenBudget, RESERVE)                  // reuse Task 2
-  chatRequest = { model: config.defaultModel, messages: ctx.messages }    // guest uses DEFAULT_MODEL (no conversation row)
+  chatRequest = { model: config.defaultModel, messages: ctx.messages }    // guest uses config.defaultModel (owned by Plan 4; no conversation row)
   callContext = { metadata: { guestSessionId: req.guest.id,
                               contextMessages: ctx.contextMessageCount, contextTokens: ctx.contextTokens } } // null conv/user ids (IN8)
   await runChatStream({
@@ -419,10 +419,10 @@ apps/api/
     onError:    async () => {},
   })
   ```
-- **Patterns / decisions / edge cases:** the cap is enforced **server-side** (Redis counter via Plan 4's `checkAndIncrementGuest`) so it can't be bypassed by client tampering (SE10/AC18); the increment happens **before** streaming so an in-flight call still counts. The 403 is sent as a plain JSON response (not an `AppError`) because §8.3 mandates the extra `{ remaining }` field beyond the standard `{ error }` shape. `messageId: null` and empty `on*` callbacks make the guest path persistence-free while reusing the exact streaming engine (DRY). `callContext` carries `guestSessionId` and omits conversation/user ids so the SDK log lands with null `conversation_id`/`user_id` (IN8) yet still feeds provider/model/latency/token dashboards. Auto-naming is **never** called here (no conversation). Model is `config.defaultModel` since there is no conversation row to read `provider`/`model` from. `messages` array is length-bounded (`.max`) to the guest limit + a small margin to refuse oversized client payloads.
+- **Patterns / decisions / edge cases:** the cap is enforced **server-side** (Redis counter via Plan 4's `checkAndIncrementGuest`) so it can't be bypassed by client tampering (SE10/AC18); the increment happens **before** streaming so an in-flight call still counts. The 403 is sent as a plain JSON response (not an `AppError`) because the contract (§3/§7) mandates the extra `{ remaining }` field beyond the standard `{ error }` shape. `messageId: null` (so `start.messageId` and `done.messageId` are both `null` per contract §3) and empty `on*` callbacks make the guest path persistence-free while reusing the exact streaming engine (DRY). `callContext` carries `guestSessionId` and omits conversation/user ids so the SDK log lands with null `conversation_id`/`user_id` (IN8) yet still feeds provider/model/latency/token dashboards. Auto-naming is **never** called here (no conversation). Model is `config.defaultModel` (owned by Plan 4 — A10) since there is no conversation row to read `provider`/`model` from. The `messages` array is length-bounded by the shared `guestMessageSchema` (`.max(50)`) to refuse oversized client payloads.
 
 **Test cases (write first, TDD — supertest, real Redis, `FakeChatProvider` injected; `guestSession` issues a guest cookie; `afterEach` flushes the guest Redis keys):**
-- under cap → `text/event-stream` with the `start`→`token`→`done` sequence (deltas concatenate to the scripted reply); **no rows** in `messages`/`conversations` (assert counts unchanged); the Redis guest counter incremented; no real Gemini call.
+- under cap → `text/event-stream` with the `start`→`token`→`done` sequence; `start.messageId` and `done.messageId` are both `null`, `done.usage` is present and non-null (deltas concatenate to the scripted reply); **no rows** in `messages`/`conversations` (assert counts unchanged); the Redis guest counter incremented; no real Gemini call.
 - at/over cap → after `GUEST_MESSAGE_LIMIT` accepted turns, the next request → `403 { error: 'login_required', remaining: 0 }`; nothing streamed; no provider call made.
 - validation → empty `content` → `400 { error: 'validation_error' }`.
 - guestSessionId on the log context → assert (via a spy/fake provider that records the `context` it was called with) that `context.metadata.guestSessionId === req.guest.id` and `context.conversationId`/`context.userId` are absent (IN8).
@@ -440,35 +440,39 @@ apps/api/
 - Test: `apps/api/test/metrics-sql.test.ts` (pure: bucket→interval mapping + param coercion/validation; the SQL execution is covered by Task 9's integration test).
 
 **Design:**
-- **Signatures / types:**
+- **Signatures / types:** the query is parsed with the **shared `metricsQuerySchema`** (from `@ollive/shared/api`, contract §5/§8 — `{ from?, to?, provider?, model?, bucket: '1m'|'5m'|'1h'|'1d' default '1m' }`, with the `from <= to` refinement); `parseMetricQuery` runs that schema, applies the `to=now` / `from=to-24h` defaults, and injects the trusted `userId`. Do NOT redefine the query schema or the `Bucket` enum (`MetricsBucket` is the shared type):
   ```ts
   import { sql, type SQL } from 'drizzle-orm';
+  import { metricsQuerySchema, type MetricsBucket } from '@ollive/shared/api';
 
-  type Bucket = '1m' | '5m' | '1h' | '1d';
   interface MetricFilters {
     from: Date; to: Date;
     provider?: string; model?: string;
-    bucket?: Bucket;                 // series endpoints only
+    bucket: MetricsBucket;           // '1m'|'5m'|'1h'|'1d' (default '1m'); series endpoints only
     userId: string;                  // ALWAYS set by the route from req.user.id (SE8)
   }
 
-  function parseMetricQuery(query: unknown, userId: string): MetricFilters; // Zod; defaults from=to-24h, to=now, bucket='1m'
-  function bucketToInterval(b: Bucket): string;   // '1m'→'1 minute', '5m'→'5 minutes', '1h'→'1 hour', '1d'→'1 day'
+  function parseMetricQuery(query: unknown, userId: string): MetricFilters; // metricsQuerySchema + defaults (from=to-24h, to=now)
+  function bucketToInterval(b: MetricsBucket): string;   // '1m'→'1 minute', '5m'→'5 minutes', '1h'→'1 hour', '1d'→'1 day'
 
   // SQL builders — each returns a Drizzle SQL fragment/full statement, all params bound (no string interpolation, SE5)
   function whereClause(f: MetricFilters): SQL;     // created_at BETWEEN + user_id = + optional provider/model
-  function overviewQuery(f: MetricFilters): SQL;   // single-row: requests,errorRate,p50/p95/p99,tokens,throughputPerMin
-  function latencyseriesQuery(f: MetricFilters): SQL;    // per-bucket p50/p95/p99 + count
-  function throughputSeriesQuery(f: MetricFilters): SQL; // per-bucket request count (→ requests/interval)
-  function errorSeriesQuery(f: MetricFilters): SQL;      // per-bucket total/errors → errorRate
-  function tokenSeriesQuery(f: MetricFilters): SQL;      // per-bucket prompt/completion/total sums
+  function overviewQuery(f: MetricFilters): SQL;   // single-row → OverviewMetrics: requests,errorRate,latencyMs{p50,p95,p99},tokens{prompt,completion,total},throughputPerMin (§8.5)
+  function latencySeriesQuery(f: MetricFilters): SQL;    // per-bucket → LatencyPoint { t, p50, p95, p99, count }
+  function throughputSeriesQuery(f: MetricFilters): SQL; // per-bucket → ThroughputPoint { t, count }
+  function errorSeriesQuery(f: MetricFilters): SQL;      // per-bucket → ErrorPoint { t, count, errorCount, errorRate }
+  function tokenSeriesQuery(f: MetricFilters): SQL;      // per-bucket → TokenPoint { t, promptTokens, completionTokens, totalTokens }
   ```
 - **Algorithm:**
-  - `parseMetricQuery` — Zod schema: `from`/`to` as ISO datetimes (`z.coerce.date()`), defaulting `to=now()` and `from=to-24h` when absent; `provider`/`model` optional non-empty strings; `bucket` enum defaulting `'1m'`. Reject `from > to`. Always inject `userId` (caller-supplied from `req.user.id`) — never read from the query (SE8).
+  - `parseMetricQuery` — run the **shared `metricsQuerySchema`** (it already coerces `from`/`to` via `z.coerce.date()`, validates `provider`/`model` as optional non-empty strings, defaults `bucket='1m'`, and enforces the `from <= to` refinement → `400 validation_error`); then apply the absent-value defaults `to=now()` / `from=to-24h`. Always inject `userId` (caller-supplied from `req.user.id`) — **never** read it from the query (SE8). Do not re-author the schema here — the shared one is the contract.
   - `bucketToInterval` — map the four buckets to Postgres interval literals used in `date_trunc`/`date_bin`. (Use `date_bin('<interval>', created_at, $epoch)` for arbitrary buckets, or `date_trunc` for the `'1m'/'1h'/'1d'` natural units; `'5m'` requires `date_bin`. Implementer picks one consistent approach — `date_bin` works for all four.)
   - `whereClause` — `sql\`created_at >= ${f.from} and created_at < ${f.to} and user_id = ${f.userId}\`` plus `and provider = ${f.provider}` / `and model = ${f.model}` appended only when present. **Every value is a bound parameter** (SE5) — no template string concatenation of user input.
-  - `overviewQuery` — one row: `count(*) as requests`; `avg(case when status='error' then 1 else 0 end) as error_rate`; `percentile_cont(0.5/0.95/0.99) within group (order by latency_ms)` for p50/p95/p99 (filtered to non-null latency); `sum(prompt_tokens)/sum(completion_tokens)/sum(total_tokens)`; `throughputPerMin = requests / max(extent_minutes, 1)` where `extent_minutes` derives from `(to - from)` in minutes.
-  - `*SeriesQuery` — `select date_bin(${interval}, created_at, ${epoch}) as t, <aggregates> ... where <whereClause> group by t order by t`. Latency series uses the same `percentile_cont` per bucket + `count(*)`. Error series emits `count(*) as count` + `sum(case when status='error' …) as errors` (route computes `errorRate=errors/count`). Token series sums the three token columns per bucket. Throughput series is `count(*)` per bucket (route divides by interval length for requests/interval if needed; §8.5's throughput series shows per-interval counts).
+  - `overviewQuery` (→ `OverviewMetrics`, contract §8.5) — one row: `count(*) as requests`; `avg(case when status='error' then 1 else 0 end) as error_rate` (route rounds to 3 dp, `0` when `requests=0`); `percentile_cont(0.5/0.95/0.99) within group (order by latency_ms)` for `latencyMs.p50/p95/p99` (filtered to non-null latency, rounded to integers); `sum(prompt_tokens)/sum(completion_tokens)/sum(total_tokens)` → `tokens.{prompt,completion,total}`; `throughputPerMin = requests / max(extent_minutes, 1)` where `extent_minutes` derives from `(to - from)` in minutes.
+  - `*SeriesQuery` — `select date_bin(${interval}, created_at, ${epoch}) as t, <aggregates> ... where <whereClause> group by t order by t asc` (one point per bucket that has data; `t` is the bucket-start ISO timestamp). Each maps to its contract point shape exactly:
+    - **latency** → `LatencyPoint { t, p50, p95, p99, count }`: `percentile_cont` p50/p95/p99 over non-null `latency_ms` per bucket (integers) + `count(*)`.
+    - **throughput** → `ThroughputPoint { t, count }`: `count(*)` rows per bucket (no per-minute division — the series carries raw per-bucket counts).
+    - **errors** → `ErrorPoint { t, count, errorCount, errorRate }`: `count(*) as count` + `sum(case when status='error' then 1 else 0 end) as errorCount`; the route computes `errorRate = errorCount / count`, **`0` when `count = 0`**.
+    - **tokens** → `TokenPoint { t, promptTokens, completionTokens, totalTokens }`: per-bucket sums of `prompt_tokens`/`completion_tokens`/`total_tokens` (named with the camelCase `*Tokens` keys per the contract, matching the SSE/log `usage` naming — NOT `prompt/completion/total`, which is only the `overview.tokens` object).
 - **Patterns / decisions / edge cases:** parameterized SQL via Drizzle's `sql` tagged template — never string-built (SE5/BE7). `percentile_cont` for latency percentiles and `date_bin` for uniform time-bucketing are the §8.5/BE7-mandated approach. `user_id = $userId` is baked into `whereClause`, so **every** metric query is user-scoped at the SQL layer (SE8) — the route cannot forget it. Latency percentiles ignore rows with null `latency_ms` (error/cancelled-before-first-token logs) via a `filter (where latency_ms is not null)` or `within group` over non-null. Empty range → zero rows → the route coerces to `requests:0, errorRate:0, latencyMs all null/0, empty series` (no divide-by-zero). `from`/`to` are `Date`s bound as `timestamptz` params.
 
 **Test cases (write first, TDD — pure unit, no DB):**
@@ -491,35 +495,52 @@ apps/api/
 - Test: `apps/api/test/metrics.int.test.ts` (supertest + real Postgres; seed `inference_logs` rows directly).
 
 **Design:**
-- **Signatures / types:**
+- **Signatures / types:** the serializers are **typed with the shared response types** (from `@ollive/shared/api`, contract §8) — `OverviewMetrics`, `LatencySeries`/`ThroughputSeries`/`ErrorSeries`/`TokenSeries` and their `LatencyPoint`/`ThroughputPoint`/`ErrorPoint`/`TokenPoint`. Do NOT redefine these response shapes:
   ```ts
+  import type {
+    OverviewMetrics,
+    LatencySeries, ThroughputSeries, ErrorSeries, TokenSeries,
+  } from '@ollive/shared/api';
   interface MetricsRouterDeps { db: Db; logger?: Logger; }
   function metricsRouter(deps: MetricsRouterDeps): Router;
   // GET /overview, /latency, /throughput, /errors, /tokens  (mounted at /v1/metrics, all behind requireAuth)
   ```
-  Response shapes reproduced verbatim (PRD §8.5) — the route must match these exactly:
+  Response shapes reproduced verbatim (API-CONTRACTS.md §5/§8.5) — the route must match these exactly:
   ```json
   // GET /v1/metrics/overview
   {
-    "range": { "from": "2026-05-23T00:00:00Z", "to": "2026-05-23T12:00:00Z" },
-    "requests": 1840, "errorRate": 0.021,
+    "range": { "from": "2026-05-23T00:00:00.000Z", "to": "2026-05-23T12:00:00.000Z" },
+    "requests": 1840,
+    "errorRate": 0.021,
     "latencyMs": { "p50": 740, "p95": 1820, "p99": 3110 },
     "tokens": { "prompt": 612000, "completion": 244000, "total": 856000 },
     "throughputPerMin": 2.6
   }
   ```
   ```json
-  // GET /v1/metrics/latency?bucket=1m
+  // GET /v1/metrics/latency?bucket=1m  — series point: { t, p50, p95, p99, count }
   {
     "bucket": "1m",
     "series": [
-      { "t": "2026-05-23T10:00:00Z", "p50": 690, "p95": 1700, "p99": 2900, "count": 12 },
-      { "t": "2026-05-23T10:01:00Z", "p50": 720, "p95": 1810, "p99": 3050, "count": 15 }
+      { "t": "2026-05-23T10:00:00.000Z", "p50": 690, "p95": 1700, "p99": 2900, "count": 12 },
+      { "t": "2026-05-23T10:01:00.000Z", "p50": 720, "p95": 1810, "p99": 3050, "count": 15 }
     ]
   }
   ```
-- **Algorithm:** each handler: `filters = parseMetricQuery(req.query, req.user.id)` (400 on invalid) → `db.execute(<builder>(filters))` → map DB rows to the §8.5 shape → `200`. `overview`: single row → `{ range:{from,to}, requests, errorRate, latencyMs:{p50,p95,p99}, tokens:{prompt,completion,total}, throughputPerMin }` (round percentiles to integers, errorRate to 3 dp, coerce nulls to 0). `latency`/`throughput`/`errors`/`tokens`: `{ bucket, series: [...] }` — map each bucket row to the documented per-point shape (`latency`→`{t,p50,p95,p99,count}`; `throughput`→`{t,count}` (or `requestsPerInterval`); `errors`→`{t,count,errors,errorRate}`; `tokens`→`{t,prompt,completion,total}`). Numeric columns arriving as strings (postgres.js NUMERIC/bigint) are coerced to `number`.
-- **Patterns / decisions / edge cases:** thin route over pure builders (BE7). `requireAuth` + `parseMetricQuery(req.query, req.user.id)` means the user scope is taken from the verified session, never the query (SE8/AC defense). Response shapes are pinned to §8.5 — the integration test asserts the exact keys. Empty range → `requests:0`, `errorRate:0`, percentile fields `0` (or null per the test's choice — be consistent), `series:[]`. `from`/`to` echoed back in `range`. Percentiles and counts coerced from string→number. `bucket` echoed from the parsed filter.
+  ```json
+  // GET /v1/metrics/errors  — series point: { t, count, errorCount, errorRate }   (errorRate = errorCount/count; 0 when count=0)
+  { "bucket": "1m", "series": [ { "t": "2026-05-23T10:00:00.000Z", "count": 12, "errorCount": 1, "errorRate": 0.0833 } ] }
+  ```
+  ```json
+  // GET /v1/metrics/throughput  — series point: { t, count }
+  { "bucket": "1m", "series": [ { "t": "2026-05-23T10:00:00.000Z", "count": 12 } ] }
+  ```
+  ```json
+  // GET /v1/metrics/tokens  — series point: { t, promptTokens, completionTokens, totalTokens }
+  { "bucket": "1m", "series": [ { "t": "2026-05-23T10:00:00.000Z", "promptTokens": 4200, "completionTokens": 1880, "totalTokens": 6080 } ] }
+  ```
+- **Algorithm:** each handler: `filters = parseMetricQuery(req.query, req.user.id)` (400 on invalid) → `db.execute(<builder>(filters))` → map DB rows to the shared response type → `200`. `overview` (→ `OverviewMetrics`): single row → `{ range:{from,to}, requests, errorRate, latencyMs:{p50,p95,p99}, tokens:{prompt,completion,total}, throughputPerMin }` (round percentiles to integers, errorRate to 3 dp, coerce nulls to 0). The four series endpoints return the common envelope `{ bucket, series: Point[] }` (`bucket` echoes the parsed filter), mapping each bucket row to its exact contract point shape: `latency`→`{ t, p50, p95, p99, count }`; `throughput`→`{ t, count }`; `errors`→`{ t, count, errorCount, errorRate }` (compute `errorRate = errorCount / count`, **`0` when `count=0`**); `tokens`→`{ t, promptTokens, completionTokens, totalTokens }`. Numeric columns arriving as strings (postgres.js NUMERIC/bigint) are coerced to `number`.
+- **Patterns / decisions / edge cases:** thin route over pure builders (BE7). `requireAuth` + `parseMetricQuery(req.query, req.user.id)` means the user scope is taken from the verified session, never the query (SE8/AC defense). Response shapes are pinned to API-CONTRACTS.md §5/§8.5 and typed via the shared `@ollive/shared/api` types — the integration test asserts the exact keys (`errorCount`/`errorRate` on the error series; `promptTokens`/`completionTokens`/`totalTokens` on the token series — NOT `errors` or `prompt/completion/total`). Empty range → `requests:0`, `errorRate:0`, percentile fields `0`, `series:[]` (no throw, no divide-by-zero). `from`/`to` echoed back in `range` as ISO strings. Percentiles and counts coerced from string→number. `bucket` echoed from the parsed filter.
 
 **Test cases (write first, TDD — supertest, real Postgres, `requireAuth` stubbed to a seeded user; seed `inference_logs` rows directly via Drizzle in `beforeEach`; `afterEach` truncates `inference_logs`):**
 - overview aggregation → seed N success rows + M error rows with known `latency_ms`/token values for the user, within range → `requests===N+M`, `errorRate≈M/(N+M)`, `latencyMs.p50/p95/p99` match the seeded distribution (within rounding), `tokens.{prompt,completion,total}` equal the seeded sums, `throughputPerMin` matches count/extent.
@@ -527,7 +548,7 @@ apps/api/
 - provider/model filters → `?provider=google&model=gemini-2.5-flash` excludes rows of other providers/models.
 - time-range filter → rows outside `[from,to)` are excluded; `range.from`/`range.to` echo the parsed values.
 - latency series buckets → `?bucket=1m` → `series` has one point per minute that has rows, each with `p50/p95/p99/count`, ordered by `t` ascending.
-- throughput / errors / tokens series → each returns `{ bucket, series }` with the documented per-point keys; error series `errorRate` per bucket matches `errors/count`; token series sums per bucket match seeded values.
+- throughput / errors / tokens series → each returns `{ bucket, series }` with the documented per-point keys (`throughput`→`{t,count}`; `errors`→`{t,count,errorCount,errorRate}`; `tokens`→`{t,promptTokens,completionTokens,totalTokens}`); error series `errorRate` per bucket matches `errorCount/count` (and `0` when `count=0`); token series sums per bucket match seeded values.
 - empty range → `requests:0`, `errorRate:0`, empty `series` (no throw, no divide-by-zero).
 - invalid query (`from>to`) → `400 { error: 'validation_error' }`.
 - unauthenticated (no `req.user`) → `401 { error: 'unauthorized' }` (via `requireAuth`).
@@ -556,13 +577,13 @@ apps/api/
   // ...in shutdown(signal): await transport.close() BEFORE closing db/redis (flush buffered logs)
   ```
   `googleProviderFactory()` constructs the real Gemini adapter (reads `GEMINI_API_KEY` from env per Plan 2); `withLoggingTransport` wraps it so every chat/title/guest call self-instruments to the local `/v1/logs` receiver. The transport's `close()` flushes the buffer on shutdown so in-flight logs are not lost.
-- **`.env.example` append:**
+- **`.env.example` append** (`DEFAULT_MODEL` is documented by Plan 4 — do not duplicate it here):
   ```dotenv
   # --- Chat (Plan 5) ---
   GEMINI_API_KEY=                       # required; the SDK provider reads this (never sent to the browser)
-  DEFAULT_MODEL=gemini-2.5-flash        # A10 default model
   CONTEXT_TOKEN_BUDGET=4000             # A3/BE5 prompt token budget (response headroom reserved internally)
   PII_REDACTION=pattern                 # off | pattern | llm (SDK9; default pattern)
+  # DEFAULT_MODEL is declared by Plan 4 (A10, default gemini-2.5-flash) — this plan READS config.defaultModel.
   ```
 - **Patterns / decisions / edge cases:** the DI seam is the linchpin testability decision — prod injects the instrumented real provider; tests inject `FakeChatProvider`, so no test path can reach Gemini while runtime still demands a real key. The SDK ships to the **local** `/v1/logs` (same process, Plan 3 receiver) using the existing `INGESTION_API_KEY` — the chat path never blocks on it (SDK4/NFR1/NFR5). Transport `close()` runs in `shutdown` before draining db/redis so buffered logs flush first.
 
@@ -580,13 +601,14 @@ apps/api/
 - [ ] `pnpm exec vitest run --project api` passes: `tokens`, `sse`, `metrics-sql` (unit) + `chat`, `guest`, `metrics` (integration, real Postgres + Redis) + the carried-over Plan 3/4 suites.
 - [ ] `pnpm test` passes all projects (Postgres + Redis up).
 - [ ] **No test path calls real Gemini** — every chat/guest/auto-name test injects `FakeChatProvider` via `createApp({ …, chatProvider })`.
-- [ ] Chat streams the `start`→`token*`→`done` SSE sequence; the assistant message is persisted (`partial`→`complete`); `updated_at` advances.
-- [ ] Client-abort → assistant row saved `status='partial'`, no SSE `error` event (ST4); mid-stream provider error → SSE `error` event + `status='error'` row, clean close (ST6).
+- [ ] Chat streams the `start { messageId, requestId }`→`token { delta }*`→`done { messageId, finishReason, usage }` SSE sequence (event shapes from `@ollive/shared/api`; **`done.usage` is always present/non-null**); the assistant message is persisted (`partial`→`complete`); `updated_at` advances.
+- [ ] Client-abort → assistant row saved `status='partial'`, **no `done` and no `error` event** (the stream simply closes — ST4 / contract §3); mid-stream provider error → SSE `error { code, message }` event (code from the SSE catalog) + `status='error'` row, clean close (ST6).
 - [ ] Context windowing trims to the budget while always keeping the latest user turn (BE5/A3); `metadata.contextMessages/contextTokens` carried into the SDK log context.
 - [ ] Guest chat enforces the cap server-side (403 `login_required` + `{ remaining }`), streams without persisting, and tags the log context with `guestSessionId` + null conv/user ids (IN8).
 - [ ] Auto-naming sets `title`/`title_source='auto'` after the first response only when `title_source='default'`; failures leave the default (FR17/FR18); never blocks the stream.
-- [ ] Metrics endpoints return the §8.5 shapes, computed via `percentile_cont` + `date_bin`, parameterized via Drizzle, scoped to `req.user.id` (SE8).
-- [ ] `server.ts` builds the instrumented provider via `withLoggingTransport(googleProviderFactory(), …)` and closes the transport on shutdown; `.env.example` documents `GEMINI_API_KEY`/`DEFAULT_MODEL`/`CONTEXT_TOKEN_BUDGET`/`PII_REDACTION`.
+- [ ] Metrics endpoints return the API-CONTRACTS.md §5/§8.5 shapes exactly (overview per §8.5; series envelope `{ bucket, series }`; points `{t,p50,p95,p99,count}` / `{t,count}` / `{t,count,errorCount,errorRate}` / `{t,promptTokens,completionTokens,totalTokens}`), validated against the shared `@ollive/shared/api` types, computed via `percentile_cont` + `date_bin`, parameterized via Drizzle, query parsed via the shared `metricsQuerySchema`, scoped to `req.user.id` (SE8).
+- [ ] Chat/guest request validation uses the shared `chatMessageSchema` / `guestMessageSchema`; metrics use `metricsQuerySchema` — none redefined locally.
+- [ ] `server.ts` builds the instrumented provider via `withLoggingTransport(googleProviderFactory(), …)` and closes the transport on shutdown; `.env.example` documents `GEMINI_API_KEY`/`CONTEXT_TOKEN_BUDGET`/`PII_REDACTION` (`DEFAULT_MODEL` is owned/documented by Plan 4 and only read here as `config.defaultModel`).
 
 ### Requirement → task map (coverage check)
 
@@ -594,7 +616,7 @@ apps/api/
 |---|---|
 | A3 / BE5 / FR3 — token-budget context window | Task 2; consumed in 6, 7 |
 | A4 / FR4 / ST4 — cancel = abort, save partial | Tasks 4, 6 |
-| A10 — default model | Tasks 1 (config), 7 (guest uses it) |
+| A10 — default model | Owned by Plan 4 (`config.defaultModel`); READ in Task 7 (guest uses it) |
 | A12 / FR17 / FR18 / BE12 — auto-naming via `title_source` | Tasks 5, 6 |
 | FR2 / ST1 / ST2 — SSE streamed reply, event types | Tasks 3, 4, 6 |
 | ST5 — heartbeat `: ping` | Task 3 |
@@ -612,4 +634,4 @@ apps/api/
 
 This plan consumes Plan 2 (`withLoggingTransport`/`googleProviderFactory`/`LLMProvider`), Plan 3 (`createApp`/`loadConfig`/`AppError`/`/v1/logs` receiver the SDK ships to), and Plan 4 (`requireAuth`/`guestSession`/`checkAndIncrementGuest` + `conversations`/`messages` tables). Plan 6 (frontend) consumes the SSE + metrics contracts defined here; Plan 7 (deployment) wires `GEMINI_API_KEY` and the new env vars into compose.
 
-> **Cross-plan risk note (Plan 4 drafted in parallel):** this plan pins Plan 4's middleware shapes as `requireAuth(deps)→req.user:{id,email,name?,avatarUrl?}`, `guestSession(deps)→req.guest:{id}`, and `checkAndIncrementGuest(redis,guestId,limit,ttl)→{allowed,remaining}`. If Plan 4 lands with different names/signatures (e.g. `authMiddleware`, `req.auth`, or a different guest-counter return shape), Tasks 6/7 need a thin rename only — the streaming engine, persistence, and SQL are unaffected. The other touch-point is `AppDeps`: this plan **adds** `chatProvider` to the interface Plan 3 defined and Plan 4 also extends; whoever lands second must union the fields rather than overwrite. The guest config keys (`guestMessageLimit`/`guestSessionTtl`) are owned by Plan 4's config extension — Task 1 here adds only the four chat keys and must not duplicate them.
+> **Cross-plan risk note (Plan 4 drafted in parallel):** this plan pins Plan 4's middleware shapes as `requireAuth(deps)→req.user:{id,email,name?,avatarUrl?}`, `guestSession(deps)→req.guest:{id}`, and `checkAndIncrementGuest(redis,guestId,limit,ttl)→{allowed,remaining}`. If Plan 4 lands with different names/signatures (e.g. `authMiddleware`, `req.auth`, or a different guest-counter return shape), Tasks 6/7 need a thin rename only — the streaming engine, persistence, and SQL are unaffected. The other touch-point is `AppDeps`: this plan **adds** `chatProvider` to the interface Plan 3 defined and Plan 4 also extends; whoever lands second must union the fields rather than overwrite. The guest config keys (`guestMessageLimit`/`guestSessionTtl`) **and `DEFAULT_MODEL`/`config.defaultModel`** are owned by Plan 4's config extension — Task 1 here adds only the **three** chat keys (`GEMINI_API_KEY`, `CONTEXT_TOKEN_BUDGET`, `PII_REDACTION`) and must not duplicate `DEFAULT_MODEL` (it only reads `config.defaultModel`).
