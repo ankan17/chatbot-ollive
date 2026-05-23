@@ -10,6 +10,7 @@ const env = {
   DATABASE_URL: process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive',
   REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
   INGESTION_API_KEY: 'test-key-health',
+  JWT_SECRET: 'test-jwt-secret-for-health',
 };
 
 const config = loadConfig(env);

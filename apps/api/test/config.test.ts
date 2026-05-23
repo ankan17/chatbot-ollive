@@ -7,6 +7,7 @@ const validEnv = {
   INGESTION_API_KEY: 'test-key',
   PORT: '4001',
   INGESTION_STREAM_MAXLEN: '50000',
+  JWT_SECRET: 'super-secret-key-for-testing',
 };
 
 describe('loadConfig', () => {
@@ -17,6 +18,7 @@ describe('loadConfig', () => {
     expect(cfg.redisUrl).toBe(validEnv.REDIS_URL);
     expect(cfg.ingestionApiKey).toBe('test-key');
     expect(cfg.ingestionStreamMaxLen).toBe(50000);
+    expect(cfg.jwtSecret).toBe('super-secret-key-for-testing');
   });
 
   it('missing PORT and INGESTION_STREAM_MAXLEN → defaults 4000 and 100000', () => {
@@ -40,5 +42,61 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...validEnv, INGESTION_API_KEY: '' })).toThrowError(
       /INGESTION_API_KEY/,
     );
+  });
+
+  // --- New auth/guest/CORS/config tests (Task 1) ---
+
+  it('valid dev env (no Google creds) → authMode dev, correct defaults', () => {
+    const cfg = loadConfig(validEnv);
+    expect(cfg.authMode).toBe('dev');
+    expect(cfg.guestMessageLimit).toBe(2);
+    expect(cfg.guestSessionTtl).toBe(86400);
+    expect(cfg.webOrigin).toBe('http://localhost:5173');
+    expect(cfg.defaultModel).toBe('gemini-2.5-flash');
+  });
+
+  it('DEFAULT_MODEL override is honored', () => {
+    const cfg = loadConfig({ ...validEnv, DEFAULT_MODEL: 'gemini-2.5-pro' });
+    expect(cfg.defaultModel).toBe('gemini-2.5-pro');
+  });
+
+  it('AUTH_MODE=google WITHOUT Google creds → throws mentioning both vars', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, AUTH_MODE: 'google' }),
+    ).toThrowError(/GOOGLE_CLIENT_ID.*GOOGLE_CLIENT_SECRET|GOOGLE_CLIENT_SECRET.*GOOGLE_CLIENT_ID/);
+  });
+
+  it('AUTH_MODE=google WITH both Google vars → parses successfully', () => {
+    const cfg = loadConfig({
+      ...validEnv,
+      AUTH_MODE: 'google',
+      GOOGLE_CLIENT_ID: 'my-client-id',
+      GOOGLE_CLIENT_SECRET: 'my-client-secret',
+    });
+    expect(cfg.authMode).toBe('google');
+    expect(cfg.googleClientId).toBe('my-client-id');
+    expect(cfg.googleClientSecret).toBe('my-client-secret');
+    expect(cfg.googleRedirectUri).toMatch(/\/auth\/google\/callback$/);
+  });
+
+  it('missing JWT_SECRET → throws mentioning JWT_SECRET', () => {
+    const { JWT_SECRET: _s, ...env } = validEnv;
+    expect(() => loadConfig(env)).toThrowError(/JWT_SECRET/);
+  });
+
+  it('GUEST_MESSAGE_LIMIT and GUEST_SESSION_TTL coerced to numbers', () => {
+    const cfg = loadConfig({
+      ...validEnv,
+      GUEST_MESSAGE_LIMIT: '5',
+      GUEST_SESSION_TTL: '3600',
+    });
+    expect(cfg.guestMessageLimit).toBe(5);
+    expect(cfg.guestSessionTtl).toBe(3600);
+  });
+
+  it('invalid WEB_ORIGIN → throws mentioning WEB_ORIGIN', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, WEB_ORIGIN: 'not-a-url' }),
+    ).toThrowError(/WEB_ORIGIN/);
   });
 });

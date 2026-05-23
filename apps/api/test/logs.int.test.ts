@@ -14,6 +14,7 @@ const env = {
   DATABASE_URL: process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive',
   REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
   INGESTION_API_KEY: TEST_API_KEY,
+  JWT_SECRET: 'test-jwt-secret-for-logs',
 };
 
 const config = loadConfig(env);

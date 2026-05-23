@@ -6,6 +6,21 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
   INGESTION_API_KEY: z.string().min(1),
   INGESTION_STREAM_MAXLEN: z.coerce.number().default(100000),
+  // Auth / JWT
+  JWT_SECRET: z.string().min(1),
+  AUTH_MODE: z.enum(['dev', 'google']).default('dev'),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_REDIRECT_URI: z.string().optional(),
+  API_BASE_URL: z.string().optional(),
+  // CORS / guest
+  WEB_ORIGIN: z.string().url().default('http://localhost:5173'),
+  GUEST_MESSAGE_LIMIT: z.coerce.number().int().positive().default(2),
+  GUEST_SESSION_TTL: z.coerce.number().int().positive().default(86400),
+  // Model
+  DEFAULT_MODEL: z.string().min(1).default('gemini-2.5-flash'),
+  // Environment
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
 
 export interface AppConfig {
@@ -14,6 +29,17 @@ export interface AppConfig {
   redisUrl: string;
   ingestionApiKey: string;
   ingestionStreamMaxLen: number;
+  jwtSecret: string;
+  authMode: 'dev' | 'google';
+  googleClientId?: string;
+  googleClientSecret?: string;
+  googleRedirectUri: string;
+  webOrigin: string;
+  guestMessageLimit: number;
+  guestSessionTtl: number;
+  /** A10 — default 'gemini-2.5-flash'; new conversations use provider='google' + this model. Plan 5 READS this; never re-adds it. */
+  defaultModel: string;
+  nodeEnv: 'development' | 'production' | 'test';
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -25,11 +51,38 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(`Invalid configuration: ${messages}`);
   }
   const data = result.data;
+
+  // Conditional refinement: AUTH_MODE=google requires both Google credentials
+  if (data.AUTH_MODE === 'google') {
+    const missing: string[] = [];
+    if (!data.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
+    if (!data.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
+    if (missing.length > 0) {
+      throw new Error(
+        `Invalid configuration: AUTH_MODE=google requires ${missing.join(' and ')} to be set`,
+      );
+    }
+  }
+
+  // Derive googleRedirectUri from explicit value, or from API_BASE_URL, or from port default
+  const apiBaseUrl = data.API_BASE_URL ?? `http://localhost:${data.PORT}`;
+  const googleRedirectUri = data.GOOGLE_REDIRECT_URI ?? `${apiBaseUrl}/auth/google/callback`;
+
   return {
     port: data.PORT,
     databaseUrl: data.DATABASE_URL,
     redisUrl: data.REDIS_URL,
     ingestionApiKey: data.INGESTION_API_KEY,
     ingestionStreamMaxLen: data.INGESTION_STREAM_MAXLEN,
+    jwtSecret: data.JWT_SECRET,
+    authMode: data.AUTH_MODE,
+    googleClientId: data.GOOGLE_CLIENT_ID,
+    googleClientSecret: data.GOOGLE_CLIENT_SECRET,
+    googleRedirectUri,
+    webOrigin: data.WEB_ORIGIN,
+    guestMessageLimit: data.GUEST_MESSAGE_LIMIT,
+    guestSessionTtl: data.GUEST_SESSION_TTL,
+    defaultModel: data.DEFAULT_MODEL,
+    nodeEnv: data.NODE_ENV,
   };
 }
