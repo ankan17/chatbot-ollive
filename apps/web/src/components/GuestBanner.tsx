@@ -7,7 +7,7 @@ interface GuestBannerProps {
   limit: number;
 }
 
-export default function GuestBanner({ remaining, limit }: GuestBannerProps) {
+export default function GuestBanner({ remaining }: GuestBannerProps) {
   const plural = remaining === 1 ? 'message' : 'messages';
 
   return (

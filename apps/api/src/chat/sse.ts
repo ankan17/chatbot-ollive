@@ -7,13 +7,13 @@ import type {
 } from '@ollive/shared/api';
 
 export interface SseStream {
-  start(data: SseStartData): void;
-  token(data: SseTokenData): void;
+  start: (data: SseStartData) => void;
+  token: (data: SseTokenData) => void;
   /** usage is required by the type — never call with a null usage */
-  done(data: SseDoneData): void;
-  error(data: SseErrorData): void;
+  done: (data: SseDoneData) => void;
+  error: (data: SseErrorData) => void;
   /** Ends the response + clears the heartbeat timer. Idempotent. */
-  close(): void;
+  close: () => void;
   readonly ended: boolean;
 }
 

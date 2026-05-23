@@ -22,15 +22,15 @@ export interface StreamChunk {
 
 export interface LLMProvider {
   readonly name: string; // "google" | "openai" | "anthropic"
-  streamChat(
+  streamChat: (
     req: ChatRequest,
     opts?: { signal?: AbortSignal; context?: CallContext },
-  ): AsyncIterable<StreamChunk>;
+  ) => AsyncIterable<StreamChunk>;
 }
 
 /** Returns redacted text + counts of each PII type found (no values). */
 export interface Redactor {
-  redact(text: string): { text: string; counts: Record<string, number> };
+  redact: (text: string) => { text: string; counts: Record<string, number> };
 }
 
 export interface InferenceLoggerConfig {

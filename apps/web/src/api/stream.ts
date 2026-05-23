@@ -10,8 +10,8 @@ import type {
 // ─── SSE frame parser ─────────────────────────────────────────────────────────
 
 export interface SseFrameParser {
-  push(textChunk: string): SseEvent[];
-  flush(): SseEvent[];
+  push: (textChunk: string) => SseEvent[];
+  flush: () => SseEvent[];
 }
 
 const KNOWN_EVENTS = new Set(['start', 'token', 'done', 'error']);

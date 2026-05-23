@@ -46,7 +46,7 @@ export class FakeProvider implements LLMProvider {
         throw err;
       }
 
-      yield this.chunks[i]!;
+      yield this.chunks[i];
 
       // Throw after N chunks have been yielded (i.e., after yielding chunk index throwAfter-1)
       if (throwError !== undefined && throwAfter !== undefined && i + 1 >= throwAfter) {
@@ -70,7 +70,7 @@ export class FakeProvider implements LLMProvider {
 export interface MockIngestionServer {
   url: string;
   received: { auth?: string; body: unknown }[];
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 export function makeMockIngestionServer(
@@ -91,7 +91,7 @@ export function makeMockIngestionServer(
       } catch {
         parsed = body;
       }
-      received.push({ auth: req.headers['authorization'] as string | undefined, body: parsed });
+      received.push({ auth: req.headers.authorization, body: parsed });
 
       if (failCount > 0) {
         failCount--;

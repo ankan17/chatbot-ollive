@@ -11,7 +11,7 @@ function luhnValid(digits: string): boolean {
   let sum = 0;
   let alt = false;
   for (let i = s.length - 1; i >= 0; i--) {
-    let n = parseInt(s[i]!, 10);
+    let n = parseInt(s[i], 10);
     if (alt) {
       n *= 2;
       if (n > 9) n -= 9;
@@ -65,7 +65,7 @@ const DETECTORS: Detector[] = [
   // 1. Email — local-part @ domain . tld
   {
     key: 'email',
-    pattern: /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g,
+    pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
     placeholder: '[EMAIL]',
   },
 
@@ -79,10 +79,10 @@ const DETECTORS: Detector[] = [
   // 3. Credit card — 13-19 digits with optional single space/dash separators, Luhn-guarded
   {
     key: 'credit_card',
-    pattern: /\b\d(?:[ \-]?\d){12,18}\b/g,
+    pattern: /\b\d(?:[ -]?\d){12,18}\b/g,
     placeholder: '[CREDIT_CARD]',
     guard: (match: string) => {
-      const digits = match.replace(/[ \-]/g, '');
+      const digits = match.replace(/[ -]/g, '');
       if (digits.length < 13 || digits.length > 19) return false;
       return luhnValid(digits);
     },
@@ -106,7 +106,7 @@ const DETECTORS: Detector[] = [
   // 6. Phone — runs after card/ssn/ip; guarded: 7-15 stripped digits
   {
     key: 'phone',
-    pattern: /(?:\+\d)?[\d\s().+\-]{7,25}(?<![.\s])/g,
+    pattern: /(?:\+\d)?[\d\s().+-]{7,25}(?<![.\s])/g,
     placeholder: '[PHONE]',
     guard: (match: string) => {
       const digits = match.replace(/\D/g, '');
@@ -118,7 +118,7 @@ const DETECTORS: Detector[] = [
   {
     key: 'api_key',
     pattern:
-      /(?:sk-|pk-|rk-)[A-Za-z0-9]{16,}|(?:ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16}|(?:xoxb-|xoxa-|xoxp-|xoxr-|xoxs-)[A-Za-z0-9\-]{10,}/g,
+      /(?:sk-|pk-|rk-)[A-Za-z0-9]{16,}|(?:ghp_|gho_|ghu_|ghs_|ghr_)[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16}|(?:xoxb-|xoxa-|xoxp-|xoxr-|xoxs-)[A-Za-z0-9-]{10,}/g,
     placeholder: '[API_KEY]',
   },
 
@@ -126,7 +126,7 @@ const DETECTORS: Detector[] = [
   //    Requires mixed case + a digit + Shannon entropy > 3.5
   {
     key: 'api_key',
-    pattern: /[A-Za-z0-9_\-]{24,}/g,
+    pattern: /[A-Za-z0-9_-]{24,}/g,
     placeholder: '[API_KEY]',
     guard: (match: string) => {
       const hasUpper = /[A-Z]/.test(match);

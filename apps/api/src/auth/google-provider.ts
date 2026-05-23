@@ -36,7 +36,7 @@ export class GoogleAuthProvider implements AuthProvider {
     });
 
     const payload = ticket.getPayload();
-    if (!payload || !payload.sub || !payload.email) {
+    if (!payload?.sub || !payload.email) {
       throw new Error('Invalid Google ID token payload');
     }
 

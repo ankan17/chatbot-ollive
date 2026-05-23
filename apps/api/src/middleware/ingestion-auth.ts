@@ -7,9 +7,9 @@ import { AppError } from '../errors.js';
  */
 export function ingestionAuth(apiKey: string): RequestHandler {
   return (req, _res, next) => {
-    const header = req.headers['authorization'] ?? '';
+    const header = req.headers.authorization ?? '';
     const match = /^Bearer\s+(.+)$/i.exec(header);
-    if (!match || match[1] !== apiKey) {
+    if (match?.[1] !== apiKey) {
       return next(new AppError('unauthorized', 'Invalid or missing Authorization header'));
     }
     next();

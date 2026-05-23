@@ -30,7 +30,7 @@
   font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 6px 18px -5px rgb(var(--accent-rgb) / 0.5);
+  box-shadow: 0 6px 18px -5px rgb(var(--accent-rgb) / 50%);
   transition: background 0.16s ease, transform 0.16s ease;
 }
 

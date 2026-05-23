@@ -21,9 +21,9 @@ export interface UseGuestChatResult {
   limit: number;
   isStreaming: boolean;
   isCapped: boolean;
-  send(content: string): void;
-  stop(): void;
-  importOnLogin(): Promise<ConversationWithMessages>;
+  send: (content: string) => void;
+  stop: () => void;
+  importOnLogin: () => Promise<ConversationWithMessages>;
 }
 
 export function useGuestChat(): UseGuestChatResult {

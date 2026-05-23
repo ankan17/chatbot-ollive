@@ -18,8 +18,8 @@ interface SessionState {
 }
 
 interface SessionContextValue extends SessionState {
-  refresh(): Promise<void>;
-  signOut(): Promise<void>;
+  refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);

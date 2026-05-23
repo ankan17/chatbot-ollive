@@ -11,7 +11,7 @@ import { BufferedHttpTransport } from '../transport/transport.js';
 
 /** Minimal seam withLogging ships validated InferenceLogs to. */
 export interface LogSink {
-  enqueue(log: InferenceLog): void;
+  enqueue: (log: InferenceLog) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,9 +111,9 @@ export function withLogging(
           stream: true,
           redactions: allCounts,
         };
-        if (req.temperature !== undefined) metadata['temperature'] = req.temperature;
-        if (req.maxOutputTokens !== undefined) metadata['maxOutputTokens'] = req.maxOutputTokens;
-        if (finishReason !== undefined) metadata['finishReason'] = finishReason;
+        if (req.temperature !== undefined) metadata.temperature = req.temperature;
+        if (req.maxOutputTokens !== undefined) metadata.maxOutputTokens = req.maxOutputTokens;
+        if (finishReason !== undefined) metadata.finishReason = finishReason;
 
         // Build candidate
         const candidate = {
@@ -148,7 +148,7 @@ export function withLogging(
         for await (const chunk of provider.streamChat(req, opts)) {
           // Capture TTFT on first delta, accumulate all deltas
           if (chunk.delta !== undefined) {
-            if (ttftMs === undefined) ttftMs = Date.now() - startedAtMs;
+            ttftMs ??= Date.now() - startedAtMs;
             outputText += chunk.delta;
           }
 

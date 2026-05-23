@@ -10,8 +10,8 @@ import type { AuthIdentity } from '../src/auth/provider.js';
 import { signState } from '../src/auth/state.js';
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
-const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 const config = loadConfig({
   DATABASE_URL,
@@ -56,7 +56,7 @@ describe('GET /auth/google (dev mode)', () => {
     const res = await request(app).get('/auth/google').redirects(0);
 
     expect(res.status).toBe(302);
-    expect(res.headers['location']).toBeTruthy();
+    expect(res.headers.location).toBeTruthy();
 
     // Should set oauth_state cookie
     const setCookie = res.headers['set-cookie'] as unknown as string[] | string | undefined;
@@ -76,7 +76,7 @@ describe('GET /auth/google/callback (dev mode)', () => {
     const oauthStateCookie = setCookieHeader?.find((c) => c.startsWith('oauth_state='));
     expect(oauthStateCookie).toBeTruthy();
 
-    const stateValue = oauthStateCookie!.split(';')[0]!.replace('oauth_state=', '');
+    const stateValue = oauthStateCookie!.split(';')[0].replace('oauth_state=', '');
     expect(stateValue).toBeTruthy();
 
     // Step 2: Follow to callback with the state
@@ -86,7 +86,7 @@ describe('GET /auth/google/callback (dev mode)', () => {
       .redirects(0);
 
     expect(cbRes.status).toBe(302);
-    expect(cbRes.headers['location']).toBe(config.webOrigin);
+    expect(cbRes.headers.location).toBe(config.webOrigin);
 
     // Should set session cookie
     const cbCookies = cbRes.headers['set-cookie'] as unknown as string[];
@@ -97,7 +97,7 @@ describe('GET /auth/google/callback (dev mode)', () => {
     // Verify user was created in DB
     const dbUsers = await db.select().from(usersTable);
     expect(dbUsers.length).toBe(1);
-    expect(dbUsers[0]!.email).toBe('demo@ollive.local');
+    expect(dbUsers[0].email).toBe('demo@ollive.local');
   });
 
   it('tampered state → 302 to WEB_ORIGIN/?auth_error=1, no session cookie', async () => {
@@ -107,7 +107,7 @@ describe('GET /auth/google/callback (dev mode)', () => {
       .redirects(0);
 
     expect(res.status).toBe(302);
-    expect(res.headers['location']).toContain('auth_error=1');
+    expect(res.headers.location).toContain('auth_error=1');
 
     const cookies = res.headers['set-cookie'] as unknown as string[] | undefined;
     const sessionCookie = cookies?.find((c) => c.startsWith('session='));
@@ -121,7 +121,7 @@ describe('GET /auth/me', () => {
     const initRes = await request(app).get('/auth/google').redirects(0);
     const setCookieHeader = initRes.headers['set-cookie'] as unknown as string[];
     const oauthStateCookie = setCookieHeader?.find((c) => c.startsWith('oauth_state='));
-    const stateValue = oauthStateCookie!.split(';')[0]!.replace('oauth_state=', '');
+    const stateValue = oauthStateCookie!.split(';')[0].replace('oauth_state=', '');
 
     const cbRes = await request(app)
       .get(`/auth/google/callback?code=dev&state=${stateValue}`)
@@ -130,7 +130,7 @@ describe('GET /auth/me', () => {
 
     const cbCookies = cbRes.headers['set-cookie'] as unknown as string[];
     const sessionCookie = cbCookies?.find((c) => c.startsWith('session='));
-    const sessionValue = sessionCookie!.split(';')[0]!;
+    const sessionValue = sessionCookie!.split(';')[0];
 
     // GET /auth/me with session
     const meRes = await request(app).get('/auth/me').set('Cookie', sessionValue);
@@ -155,7 +155,7 @@ describe('POST /auth/logout', () => {
     const initRes = await request(app).get('/auth/google').redirects(0);
     const setCookieHeader = initRes.headers['set-cookie'] as unknown as string[];
     const oauthStateCookie = setCookieHeader?.find((c) => c.startsWith('oauth_state='));
-    const stateValue = oauthStateCookie!.split(';')[0]!.replace('oauth_state=', '');
+    const stateValue = oauthStateCookie!.split(';')[0].replace('oauth_state=', '');
 
     const cbRes = await request(app)
       .get(`/auth/google/callback?code=dev&state=${stateValue}`)
@@ -164,7 +164,7 @@ describe('POST /auth/logout', () => {
 
     const cbCookies = cbRes.headers['set-cookie'] as unknown as string[];
     const sessionCookie = cbCookies?.find((c) => c.startsWith('session='));
-    const sessionValue = sessionCookie!.split(';')[0]!;
+    const sessionValue = sessionCookie!.split(';')[0];
 
     // Logout
     const logoutRes = await request(app)
@@ -179,7 +179,7 @@ describe('POST /auth/logout', () => {
     expect(clearedSession).toContain('Max-Age=0');
 
     // Subsequent /auth/me → 401
-    const meRes = await request(app).get('/auth/me').set('Cookie', sessionValue);
+    await request(app).get('/auth/me').set('Cookie', sessionValue);
     // Token is still valid until expiry, but after logout cookie is cleared
     // The test verifies logout returns 204 and clears the cookie
   });
@@ -210,7 +210,7 @@ describe('GET /v1/session', () => {
     const initRes = await request(app).get('/auth/google').redirects(0);
     const setCookieHeader = initRes.headers['set-cookie'] as unknown as string[];
     const oauthStateCookie = setCookieHeader?.find((c) => c.startsWith('oauth_state='));
-    const stateValue = oauthStateCookie!.split(';')[0]!.replace('oauth_state=', '');
+    const stateValue = oauthStateCookie!.split(';')[0].replace('oauth_state=', '');
 
     const cbRes = await request(app)
       .get(`/auth/google/callback?code=dev&state=${stateValue}`)
@@ -219,7 +219,7 @@ describe('GET /v1/session', () => {
 
     const cbCookies = cbRes.headers['set-cookie'] as unknown as string[];
     const sessionCookie = cbCookies?.find((c) => c.startsWith('session='));
-    const sessionValue = sessionCookie!.split(';')[0]!;
+    const sessionValue = sessionCookie!.split(';')[0];
 
     const sessionRes = await request(app).get('/v1/session').set('Cookie', sessionValue);
 
@@ -277,7 +277,7 @@ describe('Google-mode callback via injected fake AuthProvider', () => {
       .redirects(0);
 
     expect(cbRes.status).toBe(302);
-    expect(cbRes.headers['location']).toBe(config.webOrigin);
+    expect(cbRes.headers.location).toBe(config.webOrigin);
 
     const cookies = cbRes.headers['set-cookie'] as unknown as string[];
     const sessionCookie = cookies?.find((c) => c.startsWith('session='));

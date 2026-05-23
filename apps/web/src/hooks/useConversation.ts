@@ -8,7 +8,7 @@ export interface UseConversationResult {
   data?: ConversationWithMessages;
   status: 'idle' | 'loading' | 'success' | 'error';
   error?: ApiError;
-  reload(): Promise<void>;
+  reload: () => Promise<void>;
 }
 
 export function useConversation(id: string | undefined): UseConversationResult {

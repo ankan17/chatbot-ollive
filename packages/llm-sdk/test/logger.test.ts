@@ -52,7 +52,7 @@ describe('withLogging', () => {
 
     // Exactly one log enqueued
     expect(logs).toHaveLength(1);
-    const log = logs[0]!;
+    const log = logs[0];
 
     // Log passes schema validation
     expect(() => inferenceLogSchema.parse(log)).not.toThrow();
@@ -81,7 +81,7 @@ describe('withLogging', () => {
       { model: 'test', messages: [{ role: 'user', content: 'hi' }] },
     )) { /* drain */ }
 
-    const log = logs[0]!;
+    const log = logs[0];
     expect(log.timing.timeToFirstTokenMs).toBeGreaterThanOrEqual(15);
     expect(log.timing.timeToFirstTokenMs!).toBeLessThanOrEqual(log.timing.latencyMs);
     expect(new Date(log.timing.completedAt).getTime()).toBeGreaterThanOrEqual(
@@ -105,7 +105,7 @@ describe('withLogging', () => {
     }).rejects.toThrow('provider blew up');
 
     expect(logs).toHaveLength(1);
-    const log = logs[0]!;
+    const log = logs[0];
     expect(log.status).toBe('error');
     expect(log.error?.message).toBe('provider blew up');
     expect(log.usage).toBeNull();
@@ -133,7 +133,7 @@ describe('withLogging', () => {
     }).rejects.toThrow();
 
     expect(logs).toHaveLength(1);
-    const log = logs[0]!;
+    const log = logs[0];
     expect(log.status).toBe('cancelled');
     expect(log.preview?.output).toContain('first');
     expect(() => inferenceLogSchema.parse(log)).not.toThrow();
@@ -152,12 +152,12 @@ describe('withLogging', () => {
       { model: 'test', messages: [{ role: 'user', content: 'my ssn is 123-45-6789' }] },
     )) { /* drain */ }
 
-    const log = logs[0]!;
+    const log = logs[0];
     expect(log.preview?.output).toContain('[EMAIL]');
     expect(log.preview?.output).not.toContain('ankan@hyperverge.co');
     expect(log.preview?.input).toContain('[SSN]');
     expect(log.preview?.input).not.toContain('123-45-6789');
-    expect((log.metadata as Record<string, unknown>)['redactions']).toMatchObject({
+    expect((log.metadata).redactions).toMatchObject({
       email: 1,
       ssn: 1,
     });
@@ -181,7 +181,7 @@ describe('withLogging', () => {
       { model: 'test', messages: [{ role: 'user', content: 'hello' }] },
     )) { /* drain */ }
 
-    const log = logs[0]!;
+    const log = logs[0];
     const output = log.preview?.output ?? '';
     // Must be truncated to max chars
     expect(output.length).toBeLessThanOrEqual(PREVIEW_MAX_CHARS);
@@ -209,7 +209,7 @@ describe('withLogging', () => {
     )) { /* drain */ }
 
     expect(logs).toHaveLength(1);
-    const log = logs[0]!;
+    const log = logs[0];
     expect(log.preview?.input).toBeUndefined();
     expect(log.preview?.output).toBeUndefined();
     expect(JSON.stringify(log)).not.toContain('ankan@hyperverge.co');
@@ -237,14 +237,14 @@ describe('withLogging', () => {
       { context: { userId, metadata: { kind: 'title_generation', appName: 'ollive-web' } } },
     )) { /* drain */ }
 
-    const log = logs[0]!;
-    const meta = log.metadata as Record<string, unknown>;
+    const log = logs[0];
+    const meta = log.metadata;
     expect(log.context?.userId).toBe(userId);
-    expect(meta['kind']).toBe('title_generation');
-    expect(meta['appName']).toBe('ollive-web');
-    expect(meta['temperature']).toBe(0.7);
-    expect(meta['maxOutputTokens']).toBe(1024);
-    expect(meta['stream']).toBe(true);
+    expect(meta.kind).toBe('title_generation');
+    expect(meta.appName).toBe('ollive-web');
+    expect(meta.temperature).toBe(0.7);
+    expect(meta.maxOutputTokens).toBe(1024);
+    expect(meta.stream).toBe(true);
   });
 });
 

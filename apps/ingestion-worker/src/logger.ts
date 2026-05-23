@@ -4,7 +4,7 @@ export type Logger = pino.Logger;
 
 export function createLogger(): Logger {
   return pino({
-    level: process.env['LOG_LEVEL'] ?? 'info',
+    level: process.env.LOG_LEVEL ?? 'info',
     base: { service: 'ollive-ingestion-worker' },
   });
 }

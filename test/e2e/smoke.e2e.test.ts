@@ -270,7 +270,7 @@ describe.runIf(E2E)('Ollive E2E smoke', () => {
     it('GET /v1/conversations?status=active → created conversation appears', async () => {
       const res = await client.fetch('/v1/conversations?status=active');
       expect(res.status).toBe(200);
-      const body = await res.json() as { items: Array<{ id: string }> };
+      const body = await res.json() as { items: { id: string }[] };
       const ids = (body.items ?? []).map((c) => c.id);
       expect(ids).toContain(conversationId);
     });

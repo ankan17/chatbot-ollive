@@ -18,10 +18,10 @@ export interface RunChatArgs {
   /** Surfaced in SSE start; SDK generates its OWN id for the log */
   requestId: string;
   /** Optional progress hook (unused by guest) */
-  onDelta?(accumulated: string): void;
-  onComplete(result: { content: string; usage: Usage; finishReason: string }): Promise<void>;
-  onCancel(result: { content: string }): Promise<void>;
-  onError(result: { content: string; code: SseErrorCode; message: string }): Promise<void>;
+  onDelta?: (accumulated: string) => void;
+  onComplete: (result: { content: string; usage: Usage; finishReason: string }) => Promise<void>;
+  onCancel: (result: { content: string }) => Promise<void>;
+  onError: (result: { content: string; code: SseErrorCode; message: string }) => Promise<void>;
 }
 
 /**

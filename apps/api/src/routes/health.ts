@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Db } from '@ollive/db';
 import type { Redis } from '../redis.js';
+import { asyncHandler } from '../middleware/async-handler.js';
 
 export interface HealthRouterDeps {
   db: Db;
@@ -14,7 +15,7 @@ export function healthRouter(deps: HealthRouterDeps): Router {
     res.status(200).json({ status: 'ok' });
   });
 
-  router.get('/readyz', async (_req, res) => {
+  router.get('/readyz', asyncHandler(async (_req, res) => {
     const statuses = {
       db: 'ok' as 'ok' | 'down',
       redis: 'ok' as 'ok' | 'down',
@@ -34,7 +35,7 @@ export function healthRouter(deps: HealthRouterDeps): Router {
 
     const httpStatus = statuses.db === 'ok' && statuses.redis === 'ok' ? 200 : 503;
     res.status(httpStatus).json(statuses);
-  });
+  }));
 
   return router;
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { AppConfig } from '../config.js';
 import type { ConversationRepository } from '../conversations/repository.js';
 import { requireAuth } from '../middleware/require-auth.js';
+import { asyncHandler } from '../middleware/async-handler.js';
 import { AppError } from '../errors.js';
 import { availableModelIds } from '../models/catalog.js';
 import {
@@ -22,7 +23,7 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
   const auth = requireAuth({ config });
 
   // POST /v1/conversations/import — must be declared BEFORE /:id routes
-  router.post('/conversations/import', auth, async (req, res, next) => {
+  router.post('/conversations/import', auth, asyncHandler(async (req, res, next) => {
     try {
       const parseResult = importConversationSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -43,10 +44,10 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
     } catch (err) {
       return next(err);
     }
-  });
+  }));
 
   // GET /v1/conversations
-  router.get('/conversations', auth, async (req, res, next) => {
+  router.get('/conversations', auth, asyncHandler(async (req, res, next) => {
     try {
       const parseResult = listConversationsQuerySchema.safeParse(req.query);
       if (!parseResult.success) {
@@ -60,10 +61,10 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
     } catch (err) {
       return next(err);
     }
-  });
+  }));
 
   // POST /v1/conversations
-  router.post('/conversations', auth, async (req, res, next) => {
+  router.post('/conversations', auth, asyncHandler(async (req, res, next) => {
     try {
       const parseResult = createConversationSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -86,15 +87,15 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
     } catch (err) {
       return next(err);
     }
-  });
+  }));
 
   // GET /v1/conversations/:id
-  router.get('/conversations/:id', auth, async (req, res, next) => {
+  router.get('/conversations/:id', auth, asyncHandler(async (req, res, next) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
 
-      const detail = await conversations.getWithMessages(userId, id!);
+      const detail = await conversations.getWithMessages(userId, id);
       if (!detail) {
         return next(new AppError('not_found', 'Conversation not found'));
       }
@@ -102,10 +103,10 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
     } catch (err) {
       return next(err);
     }
-  });
+  }));
 
   // PATCH /v1/conversations/:id
-  router.patch('/conversations/:id', auth, async (req, res, next) => {
+  router.patch('/conversations/:id', auth, asyncHandler(async (req, res, next) => {
     try {
       const parseResult = patchConversationSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -118,7 +119,7 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
       const userId = req.user!.id;
       const { id } = req.params;
 
-      const conv = await conversations.patch(userId, id!, { title, status, model });
+      const conv = await conversations.patch(userId, id, { title, status, model });
       if (!conv) {
         return next(new AppError('not_found', 'Conversation not found'));
       }
@@ -126,7 +127,7 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
     } catch (err) {
       return next(err);
     }
-  });
+  }));
 
   return router;
 }

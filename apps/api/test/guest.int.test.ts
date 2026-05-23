@@ -11,11 +11,10 @@ import {
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
 import { FakeChatProvider } from './fakes.js';
-import { signGuestId } from '../src/middleware/guest-session.js';
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
-const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 // Use limit=2 (same as default)
 const config = loadConfig({
@@ -35,8 +34,8 @@ let db: ReturnType<typeof createDb>;
 let redis: InstanceType<typeof Redis>;
 
 /** Parse SSE event stream text into array of { event, data } objects. */
-function parseSseEvents(text: string): Array<{ event: string; data: unknown }> {
-  const events: Array<{ event: string; data: unknown }> = [];
+function parseSseEvents(text: string): { event: string; data: unknown }[] {
+  const events: { event: string; data: unknown }[] = [];
   const blocks = text.split('\n\n').filter((b) => b.trim() && !b.startsWith(': '));
   for (const block of blocks) {
     const lines = block.split('\n');
@@ -63,8 +62,8 @@ function extractGuestCookie(res: request.Response): string | null {
   if (!setCookie) return null;
   const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
   for (const c of cookies) {
-    const match = c.match(/^guest_session=([^;]+)/);
-    if (match) return match[1]!;
+    const match = /^guest_session=([^;]+)/.exec(c);
+    if (match) return match[1];
   }
   return null;
 }
@@ -252,7 +251,7 @@ describe('POST /v1/guest/messages — guestSessionId on log context (IN8)', () =
     expect(res.status).toBe(200);
 
     expect(chatProvider.recordedContexts.length).toBe(1);
-    const ctx = chatProvider.recordedContexts[0]!;
+    const ctx = chatProvider.recordedContexts[0];
     expect(ctx.metadata).toBeDefined();
     expect(typeof (ctx.metadata as any).guestSessionId).toBe('string');
     expect((ctx.metadata as any).guestSessionId.length).toBeGreaterThan(0);

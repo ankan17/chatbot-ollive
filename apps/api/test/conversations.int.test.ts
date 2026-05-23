@@ -8,8 +8,8 @@ import { createUserRepository } from '../src/users/repository.js';
 import { signSession } from '../src/auth/jwt.js';
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
-const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 const config = loadConfig({
   DATABASE_URL,

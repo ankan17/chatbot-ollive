@@ -8,7 +8,7 @@ import {
   toImportRequest,
   GUEST_STORAGE_KEY,
 } from '../state/guestMachine.js';
-import type { GuestState, GuestAction } from '../state/guestMachine.js';
+import type { GuestState } from '../state/guestMachine.js';
 import type { ChatMessage } from '../api/types.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -218,9 +218,9 @@ describe('toImportRequest', () => {
     expect(req.messages[1]).toEqual({ role: 'assistant', content: 'hi there' });
     // Ensure NO extra fields leak through
     const m0 = req.messages[0] as unknown as Record<string, unknown>;
-    expect(m0['id']).toBeUndefined();
-    expect(m0['sequence']).toBeUndefined();
-    expect(m0['createdAt']).toBeUndefined();
+    expect(m0.id).toBeUndefined();
+    expect(m0.sequence).toBeUndefined();
+    expect(m0.createdAt).toBeUndefined();
   });
 
   it('excludes system messages', () => {

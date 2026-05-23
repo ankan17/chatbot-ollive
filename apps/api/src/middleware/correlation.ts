@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 
 // Augment Express Request to carry the correlation id
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- global module augmentation requires `namespace`
   namespace Express {
     interface Request {
       requestId?: string;

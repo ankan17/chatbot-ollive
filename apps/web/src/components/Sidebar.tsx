@@ -8,10 +8,10 @@ interface SidebarProps {
   activeId?: string;
   statusFilter: 'active' | 'archived';
   status: 'idle' | 'loading' | 'success' | 'error';
-  onSelect(id: string): void;
-  onToggleFilter(s: 'active' | 'archived'): void;
-  onRename(id: string, title: string): void;
-  onArchive(id: string, archived: boolean): void;
+  onSelect: (id: string) => void;
+  onToggleFilter: (s: 'active' | 'archived') => void;
+  onRename: (id: string, title: string) => void;
+  onArchive: (id: string, archived: boolean) => void;
 }
 
 export default function Sidebar({

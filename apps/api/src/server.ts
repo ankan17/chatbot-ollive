@@ -62,25 +62,27 @@ async function main(): Promise<void> {
     }, 10_000);
     timer.unref();
 
-    server.close(async () => {
-      try {
-        // Flush buffered inference logs before tearing down connections
-        if (transportRef) {
-          try {
-            await transportRef.close();
-          } catch (flushErr) {
-            logger.warn({ err: flushErr }, 'transport flush error during shutdown — continuing');
+    server.close(() => {
+      void (async () => {
+        try {
+          // Flush buffered inference logs before tearing down connections
+          if (transportRef) {
+            try {
+              await transportRef.close();
+            } catch (flushErr) {
+              logger.warn({ err: flushErr }, 'transport flush error during shutdown — continuing');
+            }
+            transportRef = null;
           }
-          transportRef = null;
+          redis.disconnect();
+          await db.$client.end({ timeout: 5 });
+          logger.info('shutdown complete');
+          process.exit(0);
+        } catch (err) {
+          logger.error({ err }, 'error during shutdown');
+          process.exit(1);
         }
-        redis.disconnect();
-        await db.$client.end({ timeout: 5 });
-        logger.info('shutdown complete');
-        process.exit(0);
-      } catch (err) {
-        logger.error({ err }, 'error during shutdown');
-        process.exit(1);
-      }
+      })();
     });
   }
 

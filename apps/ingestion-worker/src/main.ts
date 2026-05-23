@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     hardCap.unref();
 
     Promise.all([
-      (async () => { redis.disconnect(); })(),
+      Promise.resolve(redis.disconnect()),
       db.$client.end({ timeout: 5 }),
     ])
       .then(() => {

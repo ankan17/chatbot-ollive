@@ -52,11 +52,11 @@ describe('cleanTitle', () => {
 // ---- Integration tests for maybeAutoName (real Postgres) ----
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
 
-const config = loadConfig({
+loadConfig({
   DATABASE_URL,
-  REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
+  REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
   PORT: '4000',
   INGESTION_API_KEY: 'test-key',
   JWT_SECRET: 'test-jwt-secret-for-naming',

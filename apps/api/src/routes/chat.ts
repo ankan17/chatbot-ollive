@@ -7,6 +7,7 @@ import type { LLMProvider } from '@ollive/llm-sdk';
 import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import { requireAuth } from '../middleware/require-auth.js';
+import { asyncHandler } from '../middleware/async-handler.js';
 import { AppError } from '../errors.js';
 import { chatMessageSchema } from '@ollive/shared/api';
 import { buildContext, estimateTokens, RESPONSE_RESERVE_TOKENS } from '../chat/tokens.js';
@@ -25,7 +26,7 @@ export function chatRouter(deps: ChatRouterDeps): Router {
   const router = Router();
   const auth = requireAuth({ config });
 
-  router.post('/:id/messages', auth, async (req, res, next) => {
+  router.post('/:id/messages', auth, asyncHandler(async (req, res, next) => {
     try {
       const parseResult = chatMessageSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -34,7 +35,7 @@ export function chatRouter(deps: ChatRouterDeps): Router {
       const body = parseResult.data;
 
       const userId = req.user!.id;
-      const convId = req.params['id']!;
+      const convId = req.params.id;
 
       // Load + scope: only the owning user can chat in this conversation (SE8)
       const convRows = await db
@@ -46,7 +47,7 @@ export function chatRouter(deps: ChatRouterDeps): Router {
       if (convRows.length === 0) {
         return next(new AppError('not_found', 'Conversation not found'));
       }
-      const conv = convRows[0]!;
+      const conv = convRows[0];
 
       // Load history (all messages, ordered)
       const historyRows = await db
@@ -86,7 +87,7 @@ export function chatRouter(deps: ChatRouterDeps): Router {
           })
           .returning({ id: messages.id });
 
-        return { asstMsgId: asstRows[0]!.id, maxSeq: currentMaxSeq };
+        return { asstMsgId: asstRows[0].id, maxSeq: currentMaxSeq };
       });
 
       const requestId = randomUUID();
@@ -149,7 +150,7 @@ export function chatRouter(deps: ChatRouterDeps): Router {
     } catch (err) {
       return next(err);
     }
-  });
+  }));
 
   return router;
 }

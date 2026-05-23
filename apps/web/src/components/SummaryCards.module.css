@@ -14,12 +14,13 @@
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
+
 .card::after {
   content: '';
   position: absolute;
-  inset: 0 0 auto 0;
+  inset: 0 0 auto;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgb(var(--accent-rgb) / 0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgb(var(--accent-rgb) / 50%), transparent);
   opacity: 0.6;
 }
 
@@ -41,6 +42,7 @@
   color: var(--color-text-primary);
   margin: 0;
 }
+
 .unit {
   font-family: var(--font-body);
   font-size: var(--text-base);

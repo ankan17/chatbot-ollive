@@ -20,7 +20,6 @@ describe('MessageBubble', () => {
   it('renders assistant markdown — **bold** becomes <strong>', () => {
     const msg = makeMsg({ role: 'assistant', content: '**bold text**' });
     render(<MessageBubble message={msg} />);
-    const strong = screen.getByRole('strong') ?? document.querySelector('strong');
     // react-markdown renders **bold** as <strong>
     expect(document.querySelector('strong')).not.toBeNull();
     expect(document.querySelector('strong')?.textContent).toBe('bold text');

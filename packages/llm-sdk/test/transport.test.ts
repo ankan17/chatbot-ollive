@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { inferenceLogSchema } from '@ollive/shared';
 import { BufferedHttpTransport } from '../src/transport/transport.js';
 import { makeMockIngestionServer } from './fakes.js';
@@ -46,8 +46,8 @@ describe('BufferedHttpTransport', () => {
     await server.close();
 
     expect(server.received).toHaveLength(2);
-    expect(server.received[0]!.auth).toBe('Bearer secret-key');
-    expect(() => inferenceLogSchema.parse(server.received[0]!.body)).not.toThrow();
+    expect(server.received[0].auth).toBe('Bearer secret-key');
+    expect(() => inferenceLogSchema.parse(server.received[0].body)).not.toThrow();
   });
 
   it('interval flush: enqueue 1 log, wait ~80ms, server received it', async () => {
@@ -109,7 +109,7 @@ describe('BufferedHttpTransport', () => {
         flushIntervalMs: 60_000,
         autoFlushOnFull: false,
         maxRetries: 0,
-        fetchImpl: quickFailFetch as typeof fetch,
+        fetchImpl: quickFailFetch,
       });
 
       const log1 = { ...baseLog, requestId: crypto.randomUUID() };

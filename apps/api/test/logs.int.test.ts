@@ -11,8 +11,8 @@ import { INGESTION_STREAM } from '@ollive/shared';
 const TEST_API_KEY = 'test-ingestion-key';
 
 const env = {
-  DATABASE_URL: process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive',
-  REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
+  DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive',
+  REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
   INGESTION_API_KEY: TEST_API_KEY,
   JWT_SECRET: 'test-jwt-secret-for-logs',
   GEMINI_API_KEY: 'dummy-gemini-key-for-tests',
@@ -116,11 +116,11 @@ describe('POST /v1/logs', () => {
     // Read the entry and verify payload
     const entries = await redis.xrange(INGESTION_STREAM, '-', '+');
     expect(entries).toHaveLength(1);
-    const fields = entries[0]![1];
+    const fields = entries[0][1];
     // fields are [field, value, ...]
     const payloadIndex = fields.indexOf('payload');
     expect(payloadIndex).toBeGreaterThanOrEqual(0);
-    const payload = JSON.parse(fields[payloadIndex + 1]!);
+    const payload = JSON.parse(fields[payloadIndex + 1]);
 
     // Correct requestId
     expect(payload.requestId).toBe(log.requestId);

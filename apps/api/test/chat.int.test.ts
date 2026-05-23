@@ -28,7 +28,7 @@ class TitleFailProvider implements LLMProvider {
     _req: ChatRequest,
     opts?: { signal?: AbortSignal; context?: CallContext },
   ): AsyncIterable<StreamChunk> {
-    if (opts?.context?.metadata?.['kind'] === 'title_generation') {
+    if (opts?.context?.metadata?.kind === 'title_generation') {
       throw new Error('title generation service unavailable');
     }
     yield { delta: 'Hello' };
@@ -41,8 +41,8 @@ class TitleFailProvider implements LLMProvider {
 }
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
-const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 const config = loadConfig({
   DATABASE_URL,
@@ -65,8 +65,8 @@ async function sessionCookieFor(userId: string, email: string): Promise<string> 
 }
 
 /** Parse SSE event stream text into array of { event, data } objects. */
-function parseSseEvents(text: string): Array<{ event: string; data: unknown }> {
-  const events: Array<{ event: string; data: unknown }> = [];
+function parseSseEvents(text: string): { event: string; data: unknown }[] {
+  const events: { event: string; data: unknown }[] = [];
   const blocks = text.split('\n\n').filter((b) => b.trim() && !b.startsWith(': '));
   for (const block of blocks) {
     const lines = block.split('\n');
@@ -151,17 +151,17 @@ describe('POST /v1/conversations/:id/messages — happy path', () => {
     // Check messages persisted
     const msgs = await db.select().from(messagesTable).where(eq(messagesTable.conversationId, conv.id)).orderBy(messagesTable.sequence);
     expect(msgs.length).toBe(2);
-    expect(msgs[0]!.role).toBe('user');
-    expect(msgs[0]!.content).toBe('Hi there');
-    expect(msgs[0]!.status).toBe('complete');
-    expect(msgs[1]!.role).toBe('assistant');
-    expect(msgs[1]!.content).toBe('Hello world');
-    expect(msgs[1]!.status).toBe('complete');
-    expect(msgs[1]!.tokenCount).toBe(5); // completionTokens from usage
+    expect(msgs[0].role).toBe('user');
+    expect(msgs[0].content).toBe('Hi there');
+    expect(msgs[0].status).toBe('complete');
+    expect(msgs[1].role).toBe('assistant');
+    expect(msgs[1].content).toBe('Hello world');
+    expect(msgs[1].status).toBe('complete');
+    expect(msgs[1].tokenCount).toBe(5); // completionTokens from usage
 
     // Check conversations.updated_at advanced
     const updatedConv = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
-    expect(new Date(updatedConv[0]!.updatedAt).getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(new Date(updatedConv[0].updatedAt).getTime()).toBeGreaterThanOrEqual(before.getTime());
   });
 });
 
@@ -387,7 +387,7 @@ describe('POST /v1/conversations/:id/messages — auto-naming (BE12)', () => {
 
     // Confirm initial state
     const initialConv = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
-    expect(initialConv[0]!.titleSource).toBe('default');
+    expect(initialConv[0].titleSource).toBe('default');
 
     await request(app)
       .post(`/v1/conversations/${conv.id}/messages`)
@@ -396,7 +396,7 @@ describe('POST /v1/conversations/:id/messages — auto-naming (BE12)', () => {
 
     // Poll until title_source is no longer 'default' (fire-and-forget)
     const deadline = Date.now() + 3000;
-    let updatedConv = initialConv[0]!;
+    let updatedConv = initialConv[0];
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 50));
       const rows = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
@@ -419,8 +419,8 @@ describe('POST /v1/conversations/:id/messages — auto-naming (BE12)', () => {
 
     // Confirm initial state
     const initialConv = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
-    expect(initialConv[0]!.titleSource).toBe('default');
-    expect(initialConv[0]!.title).toBe('New conversation');
+    expect(initialConv[0].titleSource).toBe('default');
+    expect(initialConv[0].title).toBe('New conversation');
 
     const res = await request(app)
       .post(`/v1/conversations/${conv.id}/messages`)
@@ -441,8 +441,8 @@ describe('POST /v1/conversations/:id/messages — auto-naming (BE12)', () => {
 
     // FR17: title-gen failure left default intact
     const rows = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
-    expect(rows[0]!.title).toBe('New conversation');
-    expect(rows[0]!.titleSource).toBe('default');
+    expect(rows[0].title).toBe('New conversation');
+    expect(rows[0].titleSource).toBe('default');
   });
 
   it('title_source=user conversation is left unchanged after first response', async () => {
@@ -469,7 +469,7 @@ describe('POST /v1/conversations/:id/messages — auto-naming (BE12)', () => {
     await new Promise((r) => setTimeout(r, 200));
 
     const rows = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
-    expect(rows[0]!.titleSource).toBe('user');
-    expect(rows[0]!.title).toBe('My Custom Title');
+    expect(rows[0].titleSource).toBe('user');
+    expect(rows[0].title).toBe('My Custom Title');
   });
 });

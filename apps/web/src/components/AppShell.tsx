@@ -6,7 +6,7 @@ import styles from './AppShell.module.css';
 
 export interface AppShellProps {
   user: SessionUser;
-  onSignOut(): void;
+  onSignOut: () => void;
   /** Page-specific sidebar content (e.g. conversation history). */
   sidebar?: React.ReactNode;
   /** Page-specific topbar content (e.g. the model switcher). */

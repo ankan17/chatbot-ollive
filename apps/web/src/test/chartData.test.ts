@@ -36,7 +36,7 @@ describe('toLatencyRows', () => {
     const rows = toLatencyRows([
       { t: '2026-05-23T10:00:00.000Z', p50: 100, p95: 200, p99: 300, count: 5 },
     ]);
-    expect((rows[0] as unknown as Record<string, unknown>)['count']).toBeUndefined();
+    expect((rows[0] as unknown as Record<string, unknown>).count).toBeUndefined();
   });
 
   it('1d bucket yields a date-style label, not HH:mm', () => {
@@ -66,7 +66,7 @@ describe('toThroughputRows', () => {
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0].count).toBe(42);
-    expect((rows[0] as unknown as Record<string, unknown>)['perMin']).toBeUndefined();
+    expect((rows[0] as unknown as Record<string, unknown>).perMin).toBeUndefined();
   });
 
   it('empty series returns []', () => {

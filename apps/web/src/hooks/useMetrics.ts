@@ -24,8 +24,8 @@ export interface UseMetricsResult {
   status: 'idle' | 'loading' | 'success' | 'error';
   error?: ApiError;
   filters: MetricFilters;
-  setFilters(partial: Partial<MetricFilters>): void;
-  reload(): Promise<void>;
+  setFilters: (partial: Partial<MetricFilters>) => void;
+  reload: () => Promise<void>;
 }
 
 const EMPTY_DATA: MetricsData = {

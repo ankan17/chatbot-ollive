@@ -72,8 +72,8 @@ export function extractMetadata(log: InferenceLog): InferenceLogRow {
 
   // contextMessageCount from various metadata key names
   const contextMessageCount =
-    (meta['contextMessages'] as number | undefined) ??
-    (meta['contextMessageCount'] as number | undefined) ??
+    (meta.contextMessages as number | undefined) ??
+    (meta.contextMessageCount as number | undefined) ??
     0;
 
   const derivedMetadata: Record<string, unknown> = {
@@ -81,10 +81,10 @@ export function extractMetadata(log: InferenceLog): InferenceLogRow {
     promptChars,
     outputChars,
     contextMessageCount,
-    redactions: meta['redactions'] ?? null,
-    sdkVersion: meta['sdkVersion'] ?? null,
-    appName: meta['appName'] ?? null,
-    guestSessionId: meta['guestSessionId'] ?? null,
+    redactions: meta.redactions ?? null,
+    sdkVersion: meta.sdkVersion ?? null,
+    appName: meta.appName ?? null,
+    guestSessionId: meta.guestSessionId ?? null,
   };
 
   return {

@@ -52,7 +52,7 @@ describe('parseMetricQuery', () => {
   });
 
   it('ignores userId present in raw query — always uses trusted userId arg (SE8)', () => {
-    const f = parseMetricQuery({ userId: 'attacker-id' } as unknown as Record<string, unknown>, 'trusted-user-id');
+    const f = parseMetricQuery({ userId: 'attacker-id' }, 'trusted-user-id');
     expect(f.userId).toBe('trusted-user-id');
   });
 

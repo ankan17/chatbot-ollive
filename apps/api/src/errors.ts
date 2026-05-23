@@ -35,7 +35,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     if (err instanceof AppError) {
       logger.warn({ code: err.code, message: err.message }, 'app error');
       const body: Record<string, unknown> = { error: err.code };
-      if (err.details !== undefined) body['details'] = err.details;
+      if (err.details !== undefined) body.details = err.details;
       res.status(err.status).json(body);
     } else {
       logger.error({ err }, 'unhandled error');

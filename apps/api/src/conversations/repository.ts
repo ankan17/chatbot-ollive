@@ -1,7 +1,7 @@
 /**
  * Conversation repository — all DB access, user-scoped (SE8).
  */
-import { eq, and, sql, lt, or, desc } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import { conversations, messages } from '@ollive/db';
 import type { Db } from '@ollive/db';
 import type {
@@ -14,8 +14,6 @@ import {
   toConversationSummary,
   toConversation,
   toConversationDetail,
-  type ConversationRow,
-  type MessageRow,
 } from './serialize.js';
 
 export interface ListConversationsParams {
@@ -47,11 +45,11 @@ export interface ImportConversationInput {
 }
 
 export interface ConversationRepository {
-  list(p: ListConversationsParams): Promise<ConversationListPage>;
-  create(input: CreateConversationInput): Promise<Conversation>;
-  getWithMessages(userId: string, id: string): Promise<ConversationDetail | null>;
-  patch(userId: string, id: string, input: PatchConversationInput): Promise<Conversation | null>;
-  importConversation(input: ImportConversationInput): Promise<ConversationDetail>;
+  list: (p: ListConversationsParams) => Promise<ConversationListPage>;
+  create: (input: CreateConversationInput) => Promise<Conversation>;
+  getWithMessages: (userId: string, id: string) => Promise<ConversationDetail | null>;
+  patch: (userId: string, id: string, input: PatchConversationInput) => Promise<Conversation | null>;
+  importConversation: (input: ImportConversationInput) => Promise<ConversationDetail>;
 }
 
 export function createConversationRepository(db: Db): ConversationRepository {
@@ -60,7 +58,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
       const { userId, status, limit, cursor } = p;
       const fetchLimit = limit + 1;
 
-      let query = db
+      const query = db
         .select({
           id: conversations.id,
           title: conversations.title,
@@ -90,7 +88,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
 
       const hasMore = rows.length > limit;
       const items = hasMore ? rows.slice(0, limit) : rows;
-      const nextCursor = hasMore ? (items[items.length - 1]!.id) : null;
+      const nextCursor = hasMore ? (items[items.length - 1].id) : null;
 
       return {
         items: items.map((r) =>
@@ -99,7 +97,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
             status: r.status,
             createdAt: r.createdAt,
             updatedAt: r.updatedAt,
-          } as ConversationRow),
+          }),
         ),
         nextCursor,
       };
@@ -120,8 +118,8 @@ export function createConversationRepository(db: Db): ConversationRepository {
           updatedAt: now,
         })
         .returning();
-      const row = rows[0]!;
-      return toConversation(row as unknown as ConversationRow);
+      const row = rows[0];
+      return toConversation(row);
     },
 
     async getWithMessages(userId: string, id: string): Promise<ConversationDetail | null> {
@@ -133,7 +131,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
 
       if (convRows.length === 0) return null;
 
-      const conv = convRows[0]!;
+      const conv = convRows[0];
       // Safe: conv is already user-scoped (fetched above with eq(userId)), so any messages
       // belonging to this conversation ID are guaranteed to belong to the requesting user.
       const msgRows = await db
@@ -143,8 +141,8 @@ export function createConversationRepository(db: Db): ConversationRepository {
         .orderBy(messages.sequence);
 
       return toConversationDetail(
-        conv as unknown as ConversationRow,
-        msgRows as unknown as MessageRow[],
+        conv,
+        msgRows,
       );
     },
 
@@ -158,14 +156,14 @@ export function createConversationRepository(db: Db): ConversationRepository {
       };
 
       if (input.title !== undefined) {
-        updates['title'] = input.title;
-        updates['titleSource'] = 'user'; // FR18 — rename sets title_source='user'
+        updates.title = input.title;
+        updates.titleSource = 'user'; // FR18 — rename sets title_source='user'
       }
       if (input.status !== undefined) {
-        updates['status'] = input.status;
+        updates.status = input.status;
       }
       if (input.model !== undefined) {
-        updates['model'] = input.model;
+        updates.model = input.model;
       }
 
       const rows = await db
@@ -175,7 +173,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
         .returning();
 
       if (rows.length === 0) return null;
-      return toConversation(rows[0]! as unknown as ConversationRow);
+      return toConversation(rows[0]);
     },
 
     async importConversation(input: ImportConversationInput): Promise<ConversationDetail> {
@@ -195,7 +193,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
           .limit(1);
 
         if (existing.length > 0) {
-          const conv = existing[0]!;
+          const conv = existing[0];
           const msgRows = await db
             .select()
             .from(messages)
@@ -203,8 +201,8 @@ export function createConversationRepository(db: Db): ConversationRepository {
             .orderBy(messages.sequence);
 
           return toConversationDetail(
-            conv as unknown as ConversationRow,
-            msgRows as unknown as MessageRow[],
+            conv,
+            msgRows,
           );
         }
       }
@@ -254,8 +252,8 @@ export function createConversationRepository(db: Db): ConversationRepository {
             .orderBy(messages.sequence);
 
           return toConversationDetail(
-            conv as unknown as ConversationRow,
-            msgRows as unknown as MessageRow[],
+            conv,
+            msgRows,
           );
         }
       }
@@ -266,7 +264,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
 
       // Step 3: Insert messages with sequences 1..N
       const messageValues = msgs.map((msg, i) => ({
-        conversationId: conv!.id,
+        conversationId: conv.id,
         role: msg.role,
         content: msg.content,
         sequence: i + 1,
@@ -278,8 +276,8 @@ export function createConversationRepository(db: Db): ConversationRepository {
       const insertedMessages = await db.insert(messages).values(messageValues).returning();
 
       return toConversationDetail(
-        conv as unknown as ConversationRow,
-        insertedMessages as unknown as MessageRow[],
+        conv,
+        insertedMessages,
       );
     },
   };

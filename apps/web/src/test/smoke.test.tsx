@@ -64,7 +64,7 @@ describe('smoke: guest happy path', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string | URL | Request, opts?: RequestInit) => {
-        const u = typeof url === 'string' ? url : url instanceof URL ? url.href : (url as Request).url;
+        const u = typeof url === 'string' ? url : url instanceof URL ? url.href : (url).url;
 
         if (u.includes('/v1/guest/messages') && (opts?.method ?? 'GET') === 'POST') {
           const stream = sseStream([

@@ -22,5 +22,5 @@ export async function xaddInferenceLog(
     JSON.stringify(log),
   );
   // With '*' as the id argument ioredis returns a non-null string.
-  return id as string;
+  return id!;
 }

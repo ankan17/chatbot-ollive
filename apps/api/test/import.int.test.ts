@@ -2,15 +2,15 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import request from 'supertest';
 import Redis from 'ioredis';
 import { runMigrations, createDb, users as usersTable, conversations as conversationsTable } from '@ollive/db';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
 import { createUserRepository } from '../src/users/repository.js';
 import { signSession } from '../src/auth/jwt.js';
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
-const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 const config = loadConfig({
   DATABASE_URL,
@@ -52,14 +52,14 @@ afterEach(async () => {
 // Verify Task 8.5 migration: column + partial index exist
 describe('Task 8.5 — client_conversation_id column + partial-unique index', () => {
   it('conversations table has nullable client_conversation_id column', async () => {
-    const rows = await db.execute(
-      db.select().from(conversationsTable).limit(0).toSQL().sql as unknown as string,
+    await db.execute(
+      db.select().from(conversationsTable).limit(0).toSQL().sql,
     ).catch(() => null);
 
     // Check via information_schema
     const result = await db.execute(
       `SELECT column_name, is_nullable FROM information_schema.columns
-       WHERE table_name = 'conversations' AND column_name = 'client_conversation_id'` as unknown as any,
+       WHERE table_name = 'conversations' AND column_name = 'client_conversation_id'`,
     );
     expect((result as any).length).toBeGreaterThan(0);
     const col = (result as any)[0];
@@ -70,7 +70,7 @@ describe('Task 8.5 — client_conversation_id column + partial-unique index', ()
   it('partial-unique index exists on (user_id, client_conversation_id)', async () => {
     const result = await db.execute(
       `SELECT indexname, indexdef FROM pg_indexes
-       WHERE tablename = 'conversations' AND indexname = 'uq_conv_user_client_convo'` as unknown as any,
+       WHERE tablename = 'conversations' AND indexname = 'uq_conv_user_client_convo'`,
     );
     expect((result as any).length).toBe(1);
     const idx = (result as any)[0];
@@ -190,8 +190,8 @@ describe('POST /v1/conversations/import', () => {
       .select()
       .from(conversationsTable)
       .where(eq(conversationsTable.id, res.body.id));
-    expect(dbConvs[0]!.titleSource).toBe('default');
-    expect(dbConvs[0]!.clientConversationId).toBeNull();
+    expect(dbConvs[0].titleSource).toBe('default');
+    expect(dbConvs[0].clientConversationId).toBeNull();
   });
 
   it('idempotency: same clientConversationId + same user → same conversation id, no duplicate', async () => {

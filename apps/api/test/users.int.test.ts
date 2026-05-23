@@ -3,7 +3,7 @@ import { runMigrations, createDb, users } from '@ollive/db';
 import { createUserRepository } from '../src/users/repository.js';
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
 let db: ReturnType<typeof createDb>;
 let repo: ReturnType<typeof createUserRepository>;
 

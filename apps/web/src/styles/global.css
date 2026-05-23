@@ -7,9 +7,9 @@
 
 :root {
   /* ── Typography ── */
-  --font-display: 'Young Serif', Georgia, 'Times New Roman', serif;
+  --font-display: 'Young Serif', georgia, 'Times New Roman', serif;
   --font-body: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', menlo, monospace;
 
   /* ── Accent (lime — shared by both themes; a fill, never body text) ── */
   --color-accent: #98f46f;
@@ -51,33 +51,28 @@
   color-scheme: dark;
 
   --color-bg-base: #0a0c0a;
-  --color-bg-surface: rgb(245 245 240 / 0.05);
-  --color-bg-elevated: rgb(245 245 240 / 0.07);
-
-  --color-border: rgb(245 245 240 / 0.10);
-  --border-strong: rgb(245 245 240 / 0.18);
-
+  --color-bg-surface: rgb(245 245 240 / 5%);
+  --color-bg-elevated: rgb(245 245 240 / 7%);
+  --color-border: rgb(245 245 240 / 10%);
+  --border-strong: rgb(245 245 240 / 18%);
   --color-text-primary: #f5f5f0;
-  --color-text-secondary: rgb(245 245 240 / 0.78);
-  --color-text-muted: rgb(245 245 240 / 0.62);
-  --color-text-subtle: rgb(245 245 240 / 0.32);
+  --color-text-secondary: rgb(245 245 240 / 78%);
+  --color-text-muted: rgb(245 245 240 / 62%);
+  --color-text-subtle: rgb(245 245 240 / 32%);
   --color-text-on-accent: #0a0c0a;
-
   --color-accent-hover: var(--accent-deep);
-  --color-accent-light: rgb(152 244 111 / 0.12);
-
+  --color-accent-light: rgb(152 244 111 / 12%);
   --color-error: #f4717a;
-  --color-error-light: rgb(244 113 122 / 0.14);
+  --color-error-light: rgb(244 113 122 / 14%);
   --color-success: #98f46f;
   --color-warning: #f4b14f;
-
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 10px 30px -12px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 28px 60px -28px rgb(0 0 0 / 0.75);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 10px 30px -12px rgb(0 0 0 / 60%), 0 2px 6px -2px rgb(0 0 0 / 40%);
+  --shadow-lg: 0 28px 60px -28px rgb(0 0 0 / 75%);
 
   /* Atmosphere */
-  --grad-1: rgb(var(--accent-rgb) / 0.10);
-  --grad-2: rgb(var(--accent-rgb) / 0.05);
+  --grad-1: rgb(var(--accent-rgb) / 10%);
+  --grad-2: rgb(var(--accent-rgb) / 5%);
   --grain-opacity: 0.5;
   --grain-blend: overlay;
 }
@@ -93,33 +88,27 @@
   color-scheme: light;
 
   --color-bg-base: #f5f5f0;
-  --color-bg-surface: rgb(30 47 28 / 0.05);
-  --color-bg-elevated: #ffffff;
-
-  --color-border: rgb(30 47 28 / 0.12);
-  --border-strong: rgb(30 47 28 / 0.20);
-
+  --color-bg-surface: rgb(30 47 28 / 5%);
+  --color-bg-elevated: #fff;
+  --color-border: rgb(30 47 28 / 12%);
+  --border-strong: rgb(30 47 28 / 20%);
   --color-text-primary: #14201a;
-  --color-text-secondary: rgb(30 47 28 / 0.78);
-  --color-text-muted: rgb(30 47 28 / 0.62);
-  --color-text-subtle: rgb(30 47 28 / 0.40);
+  --color-text-secondary: rgb(30 47 28 / 78%);
+  --color-text-muted: rgb(30 47 28 / 62%);
+  --color-text-subtle: rgb(30 47 28 / 40%);
   --color-text-on-accent: #14201a;
-
   --color-accent-hover: #6fd047;
-  --color-accent-light: rgb(152 244 111 / 0.18);
+  --color-accent-light: rgb(152 244 111 / 18%);
   --accent-deep: #4e9b2f; /* deeper lime for accent-as-text/icon to meet AA on cream */
-
   --color-error: #dc2626;
   --color-error-light: #fef2f2;
   --color-success: #4e9b2f;
   --color-warning: #b4791a;
-
-  --shadow-sm: 0 1px 2px rgb(30 47 28 / 0.06);
-  --shadow-md: 0 10px 30px -14px rgb(30 47 28 / 0.22), 0 2px 6px -2px rgb(30 47 28 / 0.10);
-  --shadow-lg: 0 28px 50px -30px rgb(30 47 28 / 0.35);
-
-  --grad-1: rgb(var(--accent-rgb) / 0.16);
-  --grad-2: rgb(var(--accent-rgb) / 0.10);
+  --shadow-sm: 0 1px 2px rgb(30 47 28 / 6%);
+  --shadow-md: 0 10px 30px -14px rgb(30 47 28 / 22%), 0 2px 6px -2px rgb(30 47 28 / 10%);
+  --shadow-lg: 0 28px 50px -30px rgb(30 47 28 / 35%);
+  --grad-1: rgb(var(--accent-rgb) / 16%);
+  --grad-2: rgb(var(--accent-rgb) / 10%);
   --grain-opacity: 0.35;
   --grain-blend: multiply;
 }
@@ -132,7 +121,7 @@
 
 html {
   font-size: 16px;
-  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -217,16 +206,19 @@ input, textarea {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
+
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
+
 *::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: var(--radius-full);
   border: 2px solid transparent;
   background-clip: content-box;
 }
+
 *::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }

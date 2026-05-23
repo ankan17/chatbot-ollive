@@ -3,7 +3,7 @@ import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import { checkAndIncrementGuest, readGuestRemaining, guestKey } from '../src/guest/counter.js';
 
-const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 let redis: InstanceType<typeof Redis>;
 
 const LIMIT = 2;

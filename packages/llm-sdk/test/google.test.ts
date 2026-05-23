@@ -94,7 +94,7 @@ describe('GoogleProvider', () => {
     expect(chunks[2]).toEqual({ delta: 'head out.' });
 
     // Last chunk: normalized usage + finishReason
-    const last = chunks[chunks.length - 1]!;
+    const last = chunks[chunks.length - 1];
     expect(last.usage).toEqual({
       promptTokens: 420,
       completionTokens: 188,
@@ -125,7 +125,7 @@ describe('GoogleProvider', () => {
     }
 
     expect(streamTextSpy).toHaveBeenCalledTimes(1);
-    const callArg = streamTextSpy.mock.calls[0]![0];
+    const callArg = streamTextSpy.mock.calls[0][0];
     expect(callArg.abortSignal).toBe(signal);
     expect(callArg.temperature).toBe(0.7);
     expect(callArg.maxOutputTokens).toBe(1024);
@@ -150,7 +150,7 @@ describe('GoogleProvider', () => {
       chunks.push(chunk);
     }
 
-    const last = chunks[chunks.length - 1]!;
+    const last = chunks[chunks.length - 1];
     expect(last.usage).toEqual({
       promptTokens: 0,
       completionTokens: 5,

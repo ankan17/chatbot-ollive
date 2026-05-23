@@ -20,8 +20,8 @@
 
 .composer:focus-within {
   border-color: var(--color-accent);
-  box-shadow: var(--shadow-lg), 0 0 0 4px rgb(var(--accent-rgb) / 0.14),
-    0 0 40px -8px rgb(var(--accent-rgb) / 0.4);
+  box-shadow: var(--shadow-lg), 0 0 0 4px rgb(var(--accent-rgb) / 14%),
+    0 0 40px -8px rgb(var(--accent-rgb) / 40%);
 }
 
 .textarea {
@@ -39,13 +39,16 @@
   max-height: 200px;
   overflow-y: auto;
 }
+
 .textarea::placeholder {
   color: var(--color-text-subtle);
 }
+
 .textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
 .textarea:focus-visible {
   outline: none;
 }
@@ -61,6 +64,7 @@
   cursor: pointer;
   transition: transform 0.15s ease, background 0.18s ease, box-shadow 0.2s ease, opacity 0.15s ease;
 }
+
 .button svg {
   width: 20px;
   height: 20px;
@@ -69,22 +73,25 @@
 .sendButton {
   background: var(--color-accent);
   color: var(--color-text-on-accent);
-  box-shadow: 0 6px 18px -5px rgb(var(--accent-rgb) / 0.6);
+  box-shadow: 0 6px 18px -5px rgb(var(--accent-rgb) / 60%);
 }
-.sendButton:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-  transform: translateY(-1px) scale(1.04);
-}
+
 .sendButton:disabled {
   opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
 }
 
+.sendButton:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px) scale(1.04);
+}
+
 .stopButton {
   background: var(--color-error);
   color: #fff;
 }
+
 .stopButton:hover {
   opacity: 0.88;
 }

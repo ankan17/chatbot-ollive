@@ -156,7 +156,7 @@ export async function processBatch(deps: ConsumerDeps): Promise<number> {
     'BLOCK', String(deps.blockMs),
     'STREAMS', INGESTION_STREAM,
     '>',
-  ) as Array<[stream: string, entries: StreamEntry[]]> | null;
+  ) as [stream: string, entries: StreamEntry[]][] | null;
 
   if (!response || response.length === 0) return 0;
 

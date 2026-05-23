@@ -6,13 +6,13 @@ import type { ChatRequest, LLMProvider, StreamChunk, CallContext } from '../type
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-type AnyUsage = {
+interface AnyUsage {
   inputTokens?: number | undefined;
   outputTokens?: number | undefined;
   promptTokens?: number | undefined;
   completionTokens?: number | undefined;
   totalTokens?: number | undefined;
-};
+}
 
 /**
  * Normalizes provider/SDK-version token-usage differences.
@@ -58,7 +58,7 @@ export class GoogleProvider implements LLMProvider {
   ): AsyncIterable<StreamChunk> {
     const result = streamText({
       model: googleAI(req.model),
-      messages: req.messages as NonNullable<Parameters<typeof streamText>[0]['messages']>,
+      messages: req.messages,
       abortSignal: opts?.signal,
       temperature: req.temperature,
       maxOutputTokens: req.maxOutputTokens,
@@ -72,8 +72,8 @@ export class GoogleProvider implements LLMProvider {
     // After stream ends, emit the final usage+finishReason chunk
     const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
     yield {
-      usage: normalizeUsage(usage as AnyUsage),
-      finishReason: normalizeFinishReason(finishReason as string | undefined),
+      usage: normalizeUsage(usage),
+      finishReason: normalizeFinishReason(finishReason),
     };
   }
 }

@@ -37,11 +37,11 @@ describe('estimateCostUsd', () => {
 
   it('PRICE_TABLE includes gemini-2.5-flash', () => {
     expect(PRICE_TABLE['gemini-2.5-flash']).toBeDefined();
-    expect(PRICE_TABLE['gemini-2.5-flash']!.inputPerMillion).toBe(0.30);
+    expect(PRICE_TABLE['gemini-2.5-flash'].inputPerMillion).toBe(0.30);
   });
 
   it('PRICE_TABLE includes gpt-4o-mini', () => {
     expect(PRICE_TABLE['gpt-4o-mini']).toBeDefined();
-    expect(PRICE_TABLE['gpt-4o-mini']!.outputPerMillion).toBe(0.60);
+    expect(PRICE_TABLE['gpt-4o-mini'].outputPerMillion).toBe(0.60);
   });
 });

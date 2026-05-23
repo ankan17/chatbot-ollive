@@ -7,9 +7,9 @@ import type { ChatMessage, SseDoneData, SseErrorData } from '../api/types.js';
 export interface UseChatResult {
   state: ReturnType<typeof chatReducer>;
   isStreaming: boolean;
-  send(content: string): void;
-  stop(): void;
-  reset(messages: ChatMessage[]): void;
+  send: (content: string) => void;
+  stop: () => void;
+  reset: (messages: ChatMessage[]) => void;
 }
 
 export function useChat(

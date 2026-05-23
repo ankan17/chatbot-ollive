@@ -12,6 +12,7 @@ export interface GuestIdentity {
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- global module augmentation requires `namespace`
   namespace Express {
     interface Request {
       user?: AuthUser;

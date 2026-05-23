@@ -7,7 +7,6 @@ import type { SessionUser } from '../api/types.js';
 import AppShell from '../components/AppShell.js';
 import { ThemeProvider } from '../state/themeContext.js';
 import Spinner from '../components/states/Spinner.js';
-import ErrorState from '../components/states/ErrorState.js';
 
 // ─── Stub session context ─────────────────────────────────────────────────────
 
@@ -144,8 +143,6 @@ describe('useApiErrorRedirect', () => {
     const unauthorizedError = new ApiError('unauthorized', 401, 'Unauthorized');
 
     // Capture navigation by wrapping with MemoryRouter and rendering a sign-in sentinel
-    let currentPath = '/dashboard';
-
     function LocationTracker() {
       const navigate = useNavigate();
       React.useEffect(() => {

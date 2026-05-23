@@ -6,7 +6,8 @@ import type { UserRepository } from '../users/repository.js';
 import { signState, verifyState } from '../auth/state.js';
 import { signSession, setSessionCookie, clearSessionCookie, verifySession, sessionClaimsToUser } from '../auth/jwt.js';
 import { requireAuth } from '../middleware/require-auth.js';
-import { guestSession, verifyGuestCookie, signGuestId, GUEST_COOKIE } from '../middleware/guest-session.js';
+import { asyncHandler } from '../middleware/async-handler.js';
+import { verifyGuestCookie, signGuestId, GUEST_COOKIE } from '../middleware/guest-session.js';
 import { readGuestRemaining } from '../guest/counter.js';
 import { oauthCallbackQuerySchema } from '@ollive/shared/api';
 import type { MeResponse, SessionResponse } from '@ollive/shared/api';
@@ -41,7 +42,7 @@ export function authRouter(deps: AuthRouterDeps): Router {
   });
 
   // GET /auth/google/callback?code=&state=
-  router.get('/auth/google/callback', async (req, res) => {
+  router.get('/auth/google/callback', asyncHandler(async (req, res) => {
     const { webOrigin, jwtSecret } = config;
     try {
       // Validate query params
@@ -88,7 +89,7 @@ export function authRouter(deps: AuthRouterDeps): Router {
       // On any failure, redirect to web origin with auth_error flag — never leak provider detail
       res.redirect(302, `${webOrigin}/?auth_error=1`);
     }
-  });
+  }));
 
   // POST /auth/logout — clear session cookie, 204
   router.post('/auth/logout', (req, res) => {
@@ -103,8 +104,8 @@ export function authRouter(deps: AuthRouterDeps): Router {
   });
 
   // GET /v1/session — NEVER 401; returns SessionResponse discriminated union
-  router.get('/v1/session', async (req, res) => {
-    const token = req.cookies?.['session'] as string | undefined;
+  router.get('/v1/session', asyncHandler(async (req, res) => {
+    const token = req.cookies?.session as string | undefined;
 
     // Try authenticated branch
     if (token) {
@@ -147,7 +148,7 @@ export function authRouter(deps: AuthRouterDeps): Router {
       guest: { remaining, limit },
     };
     return res.json(body);
-  });
+  }));
 
   return router;
 }

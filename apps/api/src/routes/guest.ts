@@ -4,6 +4,7 @@ import type { Redis } from '../redis.js';
 import type { AppConfig } from '../config.js';
 import type { LLMProvider } from '@ollive/llm-sdk';
 import { guestSession } from '../middleware/guest-session.js';
+import { asyncHandler } from '../middleware/async-handler.js';
 import { checkAndIncrementGuest } from '../guest/counter.js';
 import { AppError } from '../errors.js';
 import { guestMessageSchema } from '@ollive/shared/api';
@@ -21,7 +22,7 @@ export function guestChatRouter(deps: GuestChatRouterDeps): Router {
   const router = Router();
   const guest = guestSession({ config });
 
-  router.post('/messages', guest, async (req, res, next) => {
+  router.post('/messages', guest, asyncHandler(async (req, res, next) => {
     try {
       const parseResult = guestMessageSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -45,7 +46,7 @@ export function guestChatRouter(deps: GuestChatRouterDeps): Router {
 
       const requestId = randomUUID();
       const history = body.messages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
+        role: m.role,
         content: m.content,
       }));
       const ctx = buildContext(
@@ -70,14 +71,15 @@ export function guestChatRouter(deps: GuestChatRouterDeps): Router {
         context: callContext,
         messageId: null,
         requestId,
-        async onComplete() {},
-        async onCancel() {},
-        async onError() {},
+        // Guest chats are ephemeral — no DB persistence on stream lifecycle.
+        async onComplete() { /* no-op */ },
+        async onCancel() { /* no-op */ },
+        async onError() { /* no-op */ },
       });
     } catch (err) {
       return next(err);
     }
-  });
+  }));
 
   return router;
 }

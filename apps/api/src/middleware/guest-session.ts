@@ -1,5 +1,5 @@
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
-import type { RequestHandler, Request } from 'express';
+import type { RequestHandler } from 'express';
 import type { AppConfig } from '../config.js';
 
 export const GUEST_COOKIE = 'guest_session';
@@ -50,7 +50,8 @@ export function verifyGuestCookie(value: string, secret: string): string | null 
 export function guestSession(deps: GuestMiddlewareDeps): RequestHandler {
   return (req, res, next) => {
     const { config } = deps;
-    const rawCookie = req.cookies?.[GUEST_COOKIE] as string | undefined;
+    const cookies = req.cookies as Record<string, string | undefined> | undefined;
+    const rawCookie = cookies?.[GUEST_COOKIE];
 
     let guestId: string | null = null;
     let needsIssuance = false;

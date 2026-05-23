@@ -12,10 +12,10 @@ export interface UpsertUserInput {
 
 export interface UserRepository {
   /** Insert-or-update on google_sub conflict; bumps last_login_at. */
-  upsertByGoogleSub(input: UpsertUserInput): Promise<AuthUser>;
-  findById(id: string): Promise<AuthUser | null>;
+  upsertByGoogleSub: (input: UpsertUserInput) => Promise<AuthUser>;
+  findById: (id: string) => Promise<AuthUser | null>;
   /** Idempotent; the DevAuthProvider demo identity. */
-  seedDemoUser(): Promise<AuthUser>;
+  seedDemoUser: () => Promise<AuthUser>;
 }
 
 export function createUserRepository(db: Db): UserRepository {
@@ -42,14 +42,14 @@ export function createUserRepository(db: Db): UserRepository {
         })
         .returning();
 
-      const row = rows[0]!;
+      const row = rows[0];
       return rowToAuthUser(row);
     },
 
     async findById(id: string): Promise<AuthUser | null> {
       const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
       if (rows.length === 0) return null;
-      return rowToAuthUser(rows[0]!);
+      return rowToAuthUser(rows[0]);
     },
 
     async seedDemoUser(): Promise<AuthUser> {

@@ -76,34 +76,34 @@ describe('extractMetadata', () => {
   it('derived metadata: tokensPerSecond ≈ completionTokens/(latencyMs/1000)', () => {
     const log = makeSuccessLog(); // 188 tokens / 1.0s = 188
     const row = extractMetadata(log);
-    expect(row.metadata['tokensPerSecond']).toBeCloseTo(188, 0);
+    expect(row.metadata.tokensPerSecond).toBeCloseTo(188, 0);
   });
 
   it('derived metadata: promptChars / outputChars = preview lengths', () => {
     const log = makeSuccessLog();
     const row = extractMetadata(log);
-    expect(row.metadata['promptChars']).toBe('Hello, world!'.length);
-    expect(row.metadata['outputChars']).toBe('Hi there!'.length);
+    expect(row.metadata.promptChars).toBe('Hello, world!'.length);
+    expect(row.metadata.outputChars).toBe('Hi there!'.length);
   });
 
   it('derived metadata: contextMessageCount from contextMessages field', () => {
     const log = makeSuccessLog();
     const row = extractMetadata(log);
-    expect(row.metadata['contextMessageCount']).toBe(5);
+    expect(row.metadata.contextMessageCount).toBe(5);
   });
 
   it('derived metadata: redactions, sdkVersion, appName passed through', () => {
     const log = makeSuccessLog();
     const row = extractMetadata(log);
-    expect(row.metadata['redactions']).toBe(0);
-    expect(row.metadata['sdkVersion']).toBe('1.2.3');
-    expect(row.metadata['appName']).toBe('test-app');
+    expect(row.metadata.redactions).toBe(0);
+    expect(row.metadata.sdkVersion).toBe('1.2.3');
+    expect(row.metadata.appName).toBe('test-app');
   });
 
   it('derived metadata: guestSessionId null when absent', () => {
     const log = makeSuccessLog();
     const row = extractMetadata(log);
-    expect(row.metadata['guestSessionId']).toBeNull();
+    expect(row.metadata.guestSessionId).toBeNull();
   });
 
   it('error log: errorCategory=rate_limit, errorCode/errorMessage set, estimatedCostUsd=0.000000, token columns null', () => {
@@ -132,7 +132,7 @@ describe('extractMetadata', () => {
     expect(row.conversationId).toBeNull();
     expect(row.userId).toBeNull();
     expect(row.messageId).toBeNull();
-    expect(row.metadata['guestSessionId']).toBe('guest-abc-123');
+    expect(row.metadata.guestSessionId).toBe('guest-abc-123');
   });
 
   it('zero latency → tokensPerSecond === 0 (no NaN/Infinity)', () => {
@@ -144,7 +144,7 @@ describe('extractMetadata', () => {
       },
     });
     const row = extractMetadata(log);
-    expect(row.metadata['tokensPerSecond']).toBe(0);
-    expect(Number.isFinite(row.metadata['tokensPerSecond'] as number)).toBe(true);
+    expect(row.metadata.tokensPerSecond).toBe(0);
+    expect(Number.isFinite(row.metadata.tokensPerSecond as number)).toBe(true);
   });
 });

@@ -34,7 +34,7 @@ describe('signSession / verifySession', () => {
     const token = await signSession(claims, TEST_SECRET);
     const parts = token.split('.');
     // Flip a character in the payload part
-    const payloadPart = parts[1]!;
+    const payloadPart = parts[1];
     const tamperedPayload = payloadPart.slice(0, -1) + (payloadPart.endsWith('a') ? 'b' : 'a');
     const tampered = [parts[0], tamperedPayload, parts[2]].join('.');
     await expect(verifySession(tampered, TEST_SECRET)).rejects.toThrow();
@@ -62,7 +62,7 @@ describe('setSessionCookie / clearSessionCookie', () => {
     const token = await signSession(claims, TEST_SECRET);
     setSessionCookie(res as unknown as import('express').Response, token, { secure: false });
     expect(res.cookie).toHaveBeenCalledOnce();
-    const [name, value, opts] = res.cookie.mock.calls[0]!;
+    const [name, value, opts] = res.cookie.mock.calls[0];
     expect(name).toBe('session');
     expect(value).toBe(token);
     expect(opts.httpOnly).toBe(true);
@@ -76,7 +76,7 @@ describe('setSessionCookie / clearSessionCookie', () => {
     const res = makeRes();
     const token = await signSession(claims, TEST_SECRET);
     setSessionCookie(res as unknown as import('express').Response, token, { secure: true });
-    const [, , opts] = res.cookie.mock.calls[0]!;
+    const [, , opts] = res.cookie.mock.calls[0];
     expect(opts.secure).toBe(true);
   });
 
@@ -84,7 +84,7 @@ describe('setSessionCookie / clearSessionCookie', () => {
     const res = makeRes();
     clearSessionCookie(res as unknown as import('express').Response, { secure: false });
     expect(res.cookie).toHaveBeenCalledOnce();
-    const [name, , opts] = res.cookie.mock.calls[0]!;
+    const [name, , opts] = res.cookie.mock.calls[0];
     expect(name).toBe('session');
     expect(opts.maxAge).toBe(0);
   });

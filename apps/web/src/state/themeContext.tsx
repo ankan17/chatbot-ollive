@@ -13,8 +13,8 @@ const STORAGE_KEY = 'ollive-theme';
 
 interface ThemeContextValue {
   theme: Theme;
-  setTheme(theme: Theme): void;
-  toggleTheme(): void;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);

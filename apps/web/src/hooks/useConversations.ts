@@ -13,12 +13,12 @@ export interface UseConversationsResult {
   status: 'idle' | 'loading' | 'success' | 'error';
   error?: ApiError;
   statusFilter: 'active' | 'archived';
-  setStatusFilter(s: 'active' | 'archived'): void;
-  reload(): Promise<void>;
-  create(): Promise<Conversation>;
-  rename(id: string, title: string): Promise<void>;
-  archive(id: string, archived: boolean): Promise<void>;
-  refreshOne(): Promise<void>;
+  setStatusFilter: (s: 'active' | 'archived') => void;
+  reload: () => Promise<void>;
+  create: () => Promise<Conversation>;
+  rename: (id: string, title: string) => Promise<void>;
+  archive: (id: string, archived: boolean) => Promise<void>;
+  refreshOne: () => Promise<void>;
 }
 
 export function useConversations(): UseConversationsResult {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import request from 'supertest';
 import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
@@ -14,8 +14,8 @@ import { createUserRepository } from '../src/users/repository.js';
 import { signSession } from '../src/auth/jwt.js';
 
 const DATABASE_URL =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
-const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 const config = loadConfig({
   DATABASE_URL,
@@ -44,7 +44,7 @@ async function sessionCookieFor(uid: string, email: string): Promise<string> {
  * Insert inference log rows with given created_at timestamps.
  */
 async function seedLogs(
-  rows: Array<{
+  rows: {
     userId?: string;
     status?: 'success' | 'error' | 'cancelled';
     latencyMs?: number;
@@ -54,7 +54,7 @@ async function seedLogs(
     provider?: string;
     model?: string;
     createdAt: Date;
-  }>,
+  }[],
 ): Promise<void> {
   for (const row of rows) {
     await db.insert(inferenceLogsTable).values({

@@ -25,12 +25,12 @@ export class DevAuthProvider implements AuthProvider {
     return url.toString();
   }
 
-  async handleCallback(_code: string): Promise<AuthIdentity> {
+  handleCallback(_code: string): Promise<AuthIdentity> {
     // Ignore the code; always return the seeded demo identity
-    return {
+    return Promise.resolve({
       sub: DEMO_GOOGLE_SUB,
       email: this.demoEmail,
       name: this.demoName,
-    };
+    });
   }
 }

@@ -11,8 +11,8 @@ import type { ConsumerDeps } from '../src/consumer.js';
 import { createLogger } from '../src/logger.js';
 
 const databaseUrl =
-  process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
-const redisUrl = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
+const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
 let db: ReturnType<typeof createDb>;
 let redis: Redis;
@@ -79,7 +79,7 @@ function makeLog(overrides: Partial<InferenceLog> = {}): InferenceLog {
 /** Enqueues a log directly onto the stream (simulates the API receiver). */
 async function enqueue(log: InferenceLog): Promise<string> {
   const id = await redis.xadd(INGESTION_STREAM, '*', PAYLOAD_FIELD, JSON.stringify(log));
-  return id as string;
+  return id!;
 }
 
 /** Builds a ConsumerDeps with fresh counters and a unique consumer name. */
@@ -116,7 +116,7 @@ describe('consumer integration', () => {
     // Row exists with correct fields
     const rows = await db.select().from(inferenceLogs).where(eq(inferenceLogs.requestId, log.requestId));
     expect(rows).toHaveLength(1);
-    const row = rows[0]!;
+    const row = rows[0];
     expect(row.provider).toBe('google');
     expect(row.model).toBe('gemini-2.5-flash');
     expect(row.totalTokens).toBe(608);
@@ -125,9 +125,9 @@ describe('consumer integration', () => {
     expect(row.errorCategory).toBeNull();
     // tokensPerSecond: 188 tokens / 1.0s = 188
     const meta = row.metadata as Record<string, unknown>;
-    expect(meta['appName']).toBe('test-suite');
-    expect(typeof meta['tokensPerSecond']).toBe('number');
-    expect(meta['tokensPerSecond'] as number).toBeCloseTo(188, 0);
+    expect(meta.appName).toBe('test-suite');
+    expect(typeof meta.tokensPerSecond).toBe('number');
+    expect(meta.tokensPerSecond as number).toBeCloseTo(188, 0);
 
     // Entry was XACK'd — XPENDING count should be 0
     const pending = await redis.xpending(INGESTION_STREAM, INGESTION_GROUP, '-', '+', 10);
@@ -169,7 +169,7 @@ describe('consumer integration', () => {
 
     const rows = await db.select().from(inferenceLogs).where(eq(inferenceLogs.requestId, log.requestId));
     expect(rows).toHaveLength(1);
-    const row = rows[0]!;
+    const row = rows[0];
     expect(row.status).toBe('error');
     expect(row.errorCategory).toBe('rate_limit');
     expect(row.errorCode).toBe('rate_limited');
@@ -193,11 +193,11 @@ describe('consumer integration', () => {
 
     const rows = await db.select().from(inferenceLogs).where(eq(inferenceLogs.requestId, log.requestId));
     expect(rows).toHaveLength(1);
-    const row = rows[0]!;
+    const row = rows[0];
     expect(row.conversationId).toBeNull();
     expect(row.userId).toBeNull();
     const meta = row.metadata as Record<string, unknown>;
-    expect(meta['guestSessionId']).toBe('guest-session-xyz');
+    expect(meta.guestSessionId).toBe('guest-session-xyz');
   });
 
   it('poison unparseable payload → counters.dlq=1, no row written, DLQ has 1 entry, source XPENDING=0', async () => {

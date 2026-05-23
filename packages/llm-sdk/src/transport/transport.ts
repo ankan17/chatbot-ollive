@@ -59,7 +59,7 @@ export class BufferedHttpTransport implements LogSink {
 
     // Don't keep the process alive just because the timer is running
     if (typeof this.timer === 'object' && 'unref' in this.timer) {
-      (this.timer as NodeJS.Timeout).unref();
+      (this.timer).unref();
     }
   }
 

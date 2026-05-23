@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createSseParser, streamChat } from '../api/stream.js';
+import { createSseParser } from '../api/stream.js';
 import { ApiError } from '../api/errors.js';
 import type { SseStartData, SseDoneData } from '../api/types.js';
 

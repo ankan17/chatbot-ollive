@@ -45,15 +45,15 @@ export async function signSession(
 export async function verifySession(token: string, secret: string): Promise<SessionClaims> {
   const { payload } = await jwtVerify(token, secretKey(secret));
 
-  if (!payload.sub || typeof payload['email'] !== 'string') {
+  if (!payload.sub || typeof payload.email !== 'string') {
     throw new Error('Invalid JWT payload: missing required claims');
   }
 
   return {
     sub: payload.sub,
-    email: payload['email'] as string,
-    name: typeof payload['name'] === 'string' ? payload['name'] : undefined,
-    avatarUrl: typeof payload['avatarUrl'] === 'string' ? payload['avatarUrl'] : undefined,
+    email: payload.email,
+    name: typeof payload.name === 'string' ? payload.name : undefined,
+    avatarUrl: typeof payload.avatarUrl === 'string' ? payload.avatarUrl : undefined,
   };
 }
 

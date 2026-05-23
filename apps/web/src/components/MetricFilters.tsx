@@ -8,9 +8,9 @@ interface MetricFiltersProps {
   preset: RangePreset;
   provider?: string;
   model?: string;
-  onPreset(p: RangePreset): void;
-  onProvider(p: string | undefined): void;
-  onModel(m: string | undefined): void;
+  onPreset: (p: RangePreset) => void;
+  onProvider: (p: string | undefined) => void;
+  onModel: (m: string | undefined) => void;
 }
 
 export default function MetricFilters({

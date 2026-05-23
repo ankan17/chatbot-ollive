@@ -39,7 +39,7 @@ describe('openSse — headers', () => {
     openSse(res, { heartbeatMs: 0 });
     expect(headers['content-type']).toBe('text/event-stream');
     expect(headers['cache-control']).toBe('no-cache');
-    expect(headers['connection']).toBe('keep-alive');
+    expect(headers.connection).toBe('keep-alive');
   });
 });
 

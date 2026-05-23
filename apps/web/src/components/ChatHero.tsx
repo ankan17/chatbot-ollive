@@ -4,7 +4,7 @@ import styles from './ChatHero.module.css';
 interface ChatHeroProps {
   title: string;
   subtitle: string;
-  onPickPrompt(prompt: string): void;
+  onPickPrompt: (prompt: string) => void;
 }
 
 interface Prompt {

@@ -4,14 +4,14 @@ import styles from './Composer.module.css';
 interface ComposerProps {
   disabled?: boolean;
   isStreaming: boolean;
-  onSend(content: string): void;
-  onStop(): void;
+  onSend: (content: string) => void;
+  onStop: () => void;
   placeholder?: string;
 }
 
 export interface ComposerHandle {
   /** Fill the input with text and focus it (used by suggested prompts). */
-  fill(text: string): void;
+  fill: (text: string) => void;
 }
 
 const MAX_HEIGHT = 200;

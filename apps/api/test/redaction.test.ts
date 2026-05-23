@@ -51,11 +51,11 @@ describe('redactInferenceLog', () => {
       },
     });
     const result = redactInferenceLog(log);
-    expect(result.metadata['paymentInfo']).toContain('[CREDIT_CARD]');
-    expect(result.metadata['temperature']).toBe(0.7);
-    expect(result.metadata['contextMessages']).toBe(3);
+    expect(result.metadata.paymentInfo).toContain('[CREDIT_CARD]');
+    expect(result.metadata.temperature).toBe(0.7);
+    expect(result.metadata.contextMessages).toBe(3);
     // Nested objects left as-is (shallow redaction only)
-    expect(result.metadata['nested']).toEqual({ key: 'value' });
+    expect(result.metadata.nested).toEqual({ key: 'value' });
   });
 
   it('clean log → previews and metadata unchanged, result is schema-valid', () => {
@@ -66,8 +66,8 @@ describe('redactInferenceLog', () => {
     const result = redactInferenceLog(log);
     expect(result.preview.input).toBe('Hello world');
     expect(result.preview.output).toBe('Hi there');
-    expect(result.metadata['sdkVersion']).toBe('1.0.0');
-    expect(result.metadata['appName']).toBe('testapp');
+    expect(result.metadata.sdkVersion).toBe('1.0.0');
+    expect(result.metadata.appName).toBe('testapp');
   });
 
   it('log with empty preview and empty metadata → no throw, result schema-valid', () => {
@@ -84,9 +84,9 @@ describe('redactInferenceLog', () => {
       metadata: { info: 'test@example.com' },
     });
     const originalInput = log.preview.input;
-    const originalMeta = log.metadata['info'];
+    const originalMeta = log.metadata.info;
     redactInferenceLog(log);
     expect(log.preview.input).toBe(originalInput);
-    expect(log.metadata['info']).toBe(originalMeta);
+    expect(log.metadata.info).toBe(originalMeta);
   });
 });

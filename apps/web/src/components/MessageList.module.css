@@ -46,10 +46,12 @@
   backdrop-filter: blur(8px);
   transition: color 0.16s ease, border-color 0.16s ease;
 }
+
 .toLatest svg {
   width: 14px;
   height: 14px;
 }
+
 .toLatest:hover {
   color: var(--color-text-primary);
   border-color: var(--color-accent);

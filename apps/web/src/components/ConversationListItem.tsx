@@ -6,9 +6,9 @@ import styles from './ConversationListItem.module.css';
 interface ConversationListItemProps {
   conversation: Conversation;
   active: boolean;
-  onSelect(): void;
-  onRename(title: string): void;
-  onArchive(archived: boolean): void;
+  onSelect: () => void;
+  onRename: (title: string) => void;
+  onArchive: (archived: boolean) => void;
 }
 
 export default function ConversationListItem({

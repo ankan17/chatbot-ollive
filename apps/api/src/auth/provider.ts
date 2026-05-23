@@ -12,9 +12,9 @@ export interface AuthIdentity {
 export interface AuthProvider {
   name: string;
   /** Returns the redirect URL for the OAuth consent screen. */
-  getAuthorizationUrl(state: string): string;
+  getAuthorizationUrl: (state: string) => string;
   /** Exchanges the OAuth code for an identity. Throws on failure. */
-  handleCallback(code: string): Promise<AuthIdentity>;
+  handleCallback: (code: string) => Promise<AuthIdentity>;
 }
 
 /**

@@ -25,7 +25,7 @@
   border-radius: var(--radius-full);
   padding: var(--space-2) var(--space-5);
   cursor: pointer;
-  box-shadow: 0 6px 18px -6px rgb(var(--accent-rgb) / 0.5);
+  box-shadow: 0 6px 18px -6px rgb(var(--accent-rgb) / 50%);
   transition: background-color 0.15s ease, transform 0.15s ease;
 }
 

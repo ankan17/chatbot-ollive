@@ -3,7 +3,7 @@ import { googleSignInUrl } from '../api/session.js';
 import styles from './SignInScreen.module.css';
 
 export interface SignInScreenProps {
-  onSignIn(): void;
+  onSignIn: () => void;
 }
 
 function OliveMark() {

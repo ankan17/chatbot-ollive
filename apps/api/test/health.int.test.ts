@@ -7,8 +7,8 @@ import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
 
 const env = {
-  DATABASE_URL: process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive',
-  REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
+  DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive',
+  REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
   INGESTION_API_KEY: 'test-key-health',
   JWT_SECRET: 'test-jwt-secret-for-health',
   GEMINI_API_KEY: 'dummy-gemini-key-for-tests',

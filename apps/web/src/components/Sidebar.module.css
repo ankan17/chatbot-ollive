@@ -10,6 +10,7 @@
   gap: var(--space-2);
   padding: 0 var(--space-1) var(--space-3);
 }
+
 .filterBtn {
   flex: 1;
   font-family: var(--font-body);
@@ -23,9 +24,11 @@
   cursor: pointer;
   transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 }
+
 .filterBtn:hover {
   color: var(--color-text-primary);
 }
+
 .filterBtn.activeFilter {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);

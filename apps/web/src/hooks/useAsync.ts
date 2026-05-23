@@ -5,7 +5,7 @@ export interface AsyncResult<T> {
   status: 'idle' | 'loading' | 'success' | 'error';
   data?: T;
   error?: ApiError;
-  run(): Promise<void>;
+  run: () => Promise<void>;
 }
 
 export function useAsync<T>(
@@ -43,10 +43,10 @@ export function useAsync<T>(
       setError(err instanceof ApiError ? err : new ApiError('internal_error', 0, String(err)));
       setStatus('error');
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   // Auto-run on deps change
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     void run();
     return () => {

@@ -17,6 +17,7 @@
   cursor: pointer;
   transition: border-color 0.16s ease, color 0.16s ease;
 }
+
 button.pill:hover {
   border-color: var(--border-strong);
   color: var(--color-text-primary);
@@ -35,6 +36,7 @@ button.pill:hover {
   display: inline-flex;
   color: var(--color-text-muted);
 }
+
 .chevron svg {
   width: 13px;
   height: 13px;
@@ -74,6 +76,7 @@ button.pill:hover {
   text-align: left;
   cursor: pointer;
 }
+
 .option:hover {
   background: var(--color-bg-surface);
 }
@@ -84,19 +87,23 @@ button.pill:hover {
   justify-content: space-between;
   gap: var(--space-2);
 }
+
 .optLabel {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-primary);
 }
+
 .optCheck {
   display: inline-flex;
   color: var(--color-accent);
 }
+
 .optCheck svg {
   width: 15px;
   height: 15px;
 }
+
 .optDesc {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
