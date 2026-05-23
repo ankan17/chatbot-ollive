@@ -19,4 +19,12 @@ export default defineWorkspace([
       fileParallelism: false,
     },
   },
+  {
+    test: {
+      name: 'ingestion-worker',
+      root: './apps/ingestion-worker',
+      testTimeout: 30000,
+      fileParallelism: false,
+    },
+  },
 ]);

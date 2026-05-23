@@ -1,0 +1,23 @@
+{
+  "name": "@ollive/ingestion-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/main.ts" },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "dev": "tsx --watch src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ollive/db": "workspace:*",
+    "@ollive/shared": "workspace:*",
+    "drizzle-orm": "^0.38.0",
+    "ioredis": "^5.4.0",
+    "pino": "^9.5.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
