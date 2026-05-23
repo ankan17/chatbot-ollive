@@ -34,6 +34,7 @@ export const conversations = pgTable(
     status: text('status').notNull().default('active'),
     provider: text('provider').notNull(),
     model: text('model').notNull(),
+    clientConversationId: text('client_conversation_id'), // nullable — idempotency key for import
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     // NOTE: updatedAt is NOT auto-maintained by a DB trigger. Every UPDATE path in the
     // application layer must set updatedAt explicitly (or add a BEFORE UPDATE trigger).
@@ -43,6 +44,10 @@ export const conversations = pgTable(
     index('idx_conv_user_status_updated').on(t.userId, t.status, t.updatedAt),
     check('conv_status_check', sql`${t.status} in ('active','archived')`),
     check('conv_title_source_check', sql`${t.titleSource} in ('default','auto','user')`),
+    // Partial unique index — allows multiple NULLs; enforces uniqueness only when non-null
+    uniqueIndex('uq_conv_user_client_convo')
+      .on(t.userId, t.clientConversationId)
+      .where(sql`${t.clientConversationId} is not null`),
   ],
 );
 
