@@ -28,4 +28,13 @@ export default defineWorkspace([
     },
   },
   './apps/web/vite.config.ts',
+  {
+    test: {
+      name: 'e2e',
+      root: '.',
+      include: ['test/e2e/**/*.e2e.test.ts'],
+      testTimeout: 30000,
+      fileParallelism: false,
+    },
+  },
 ]);
