@@ -18,5 +18,10 @@ export { ProviderRegistry } from './registry.js';
 export type { ProviderFactory } from './registry.js';
 
 // Task 4: withLogging decorator + LogSink seam
-export { withLogging } from './logging/logger.js';
+// Task 5: withLoggingTransport convenience factory
+export { withLogging, withLoggingTransport } from './logging/logger.js';
 export type { LogSink } from './logging/logger.js';
+
+// Task 5: BufferedHttpTransport + TransportConfig
+export { BufferedHttpTransport } from './transport/transport.js';
+export type { TransportConfig } from './transport/transport.js';

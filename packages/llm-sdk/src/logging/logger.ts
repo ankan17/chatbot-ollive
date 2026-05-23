@@ -184,8 +184,29 @@ export function withLogging(
 }
 
 // ---------------------------------------------------------------------------
-// withLoggingTransport — convenience factory (added in Task 5)
-// (Stub: implementation completed in Task 5 when BufferedHttpTransport exists)
+// withLoggingTransport — convenience factory (Task 5)
 // ---------------------------------------------------------------------------
 
-// The actual withLoggingTransport is appended in Task 5 after the transport is created.
+import { BufferedHttpTransport } from '../transport/transport.js';
+
+/**
+ * Convenience factory: constructs a BufferedHttpTransport from config,
+ * wraps the provider with withLogging, and returns both so the app can
+ * await transport.close() on graceful shutdown.
+ */
+export function withLoggingTransport(
+  provider: LLMProvider,
+  config: InferenceLoggerConfig,
+): { provider: LLMProvider; transport: BufferedHttpTransport } {
+  const transport = new BufferedHttpTransport({
+    ingestionUrl: config.ingestionUrl,
+    apiKey: config.apiKey,
+    maxBufferSize: config.maxBufferSize,
+    flushIntervalMs: config.flushIntervalMs,
+    maxRetries: config.maxRetries,
+  });
+  return {
+    provider: withLogging(provider, config, transport),
+    transport,
+  };
+}
