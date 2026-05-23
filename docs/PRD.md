@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Status** | Approved for implementation |
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **Date** | 2026-05-23 |
 | **Author** | Ankan Poddar |
 | **Context** | Take-home assignment — AI infrastructure / platform engineering |
@@ -85,6 +85,8 @@ The stack is TypeScript end-to-end, pragmatic by design, and runs with a single 
 - **G8** — Conversation lifecycle in the UI: list, resume, and cancel (abort an in-flight stream).
 - **G9** — `docker compose up` brings up the entire system.
 - **G10** — Google OAuth authentication, behind a provider abstraction.
+- **G11** — Frictionless onboarding: anonymous users can exchange a limited number of messages before being asked to sign in, and that conversation survives the sign-in.
+- **G12** — Conversations are auto-named from their first exchange.
 
 ### Non-Goals
 
@@ -112,6 +114,8 @@ These are explicit and may be revisited; each is chosen to remove ambiguity.
 - **A8** — Redis Streams provides **at-least-once** delivery; the worker is **idempotent** via a unique `request_id`.
 - **A9** — TLS is terminated at an upstream proxy/load balancer in production; services speak plain HTTP internally. Local dev is HTTP.
 - **A10** — Default model is `gemini-2.5-flash`, configurable via env.
+- **A11** — **Guest trial**: an unauthenticated visitor may send up to `GUEST_MESSAGE_LIMIT` messages (default **2**) before sign-in is required. The guest conversation is held in **client local state** (not persisted server-side); the cap is enforced **server-side** via a short-lived guest session (signed httpOnly cookie + Redis counter), with IP rate limiting as backup. On sign-in the buffered conversation is **imported**, persisted, and resumes seamlessly.
+- **A12** — **Auto-naming**: a conversation's title starts as `"New conversation"`. After the first assistant response completes, if the user has not set a custom title, an LLM call generates a concise title. Whether the user set a title is tracked by a `title_source` field (`default` | `auto` | `user`), never by string comparison — so a user who manually renames *to* "New conversation" is still respected.
 
 ---
 
@@ -213,7 +217,15 @@ Two Node processes plus infra: **`api`** and **`ingestion-worker`**. This honors
 - **FR12** — A dashboard shows **latency** (p50/p95/p99 over time), **throughput** (requests/interval), **error rate**, and **token usage** (prompt/completion/total over time), filterable by time range, provider, and model.
 
 ### Auth
-- **FR13** — Users authenticate via Google OAuth; unauthenticated users cannot access chat, conversations, or dashboards.
+- **FR13** — Users authenticate via Google OAuth. Anonymous users may use chat up to the guest limit (FR15); persisted history, conversation lists, and dashboards require sign-in.
+
+### Guest Trial & Onboarding
+- **FR15** — An anonymous visitor can exchange up to `GUEST_MESSAGE_LIMIT` (default 2) messages without signing in; the conversation is kept in client local state, and the limit is enforced server-side.
+- **FR16** — After the limit, the composer is blocked and the user is prompted to sign in. On sign-in, the buffered conversation is imported, persisted, and resumed without losing context.
+
+### Conversation Naming
+- **FR17** — New conversations are titled "New conversation". After the first assistant response, the system auto-generates a concise title via the LLM, unless the user has set a custom title (`title_source`).
+- **FR18** — A user-set title is never overwritten by auto-naming, even if the user typed "New conversation".
 
 ### Multi-Provider
 - **FR14** — Adding a new provider requires implementing one adapter against `LLMProvider`; no changes to chat, logging, ingestion, or storage.
@@ -235,10 +247,13 @@ Two Node processes plus infra: **`api`** and **`ingestion-worker`**. This honors
 
 ## 7. User Flows
 
-### 7.1 Sign In
-1. User opens the app → redirected to sign-in if no valid session cookie.
-2. Clicks "Sign in with Google" → `GET /auth/google` → Google consent.
-3. Callback creates/finds the user, sets an httpOnly JWT cookie, redirects to the app.
+### 7.1 Anonymous Trial → Sign In → Import
+1. A visitor lands with no session. The app starts a guest conversation in local state (mirrored to `localStorage`); the API issues a signed httpOnly `guest_session` cookie.
+2. The visitor sends up to `GUEST_MESSAGE_LIMIT` (default 2) messages via the guest chat endpoint and receives streamed replies; messages live in client local state. The server increments a per-guest counter in Redis.
+3. On exceeding the limit, the guest chat endpoint returns `403 login_required`; the UI blocks the composer and prompts "Sign in to continue".
+4. The user clicks "Sign in with Google" → `GET /auth/google` → Google consent → callback upserts the user and sets an httpOnly JWT cookie. (In `AUTH_MODE=dev`, a seeded user is authenticated directly.)
+5. The client calls `POST /v1/conversations/import` with the buffered messages; the server persists them as a new conversation owned by the user and returns it.
+6. The conversation resumes seamlessly. Because `title_source='default'`, auto-naming (§7.2) runs against the imported exchange.
 
 ### 7.2 New Conversation & Streamed Reply
 1. User clicks "New chat" → `POST /v1/conversations` → empty conversation.
@@ -246,6 +261,7 @@ Two Node processes plus infra: **`api`** and **`ingestion-worker`**. This honors
 3. API persists the user message, pre-creates an empty assistant message (gets `messageId`), trims context to the token budget, and opens an SSE stream.
 4. API calls the instrumented `LLMProvider.streamChat(..., signal)`; deltas are forwarded as `token` events.
 5. On completion: API updates the assistant message content + token count; the SDK ships the inference log.
+6. If this was the **first** assistant response and `title_source='default'`, the API asynchronously generates a title via the LLM, sets it, and marks `title_source='auto'`; the client refreshes the sidebar title on stream `done`.
 
 ### 7.3 Cancel an In-Flight Response
 1. While streaming, user clicks "Stop".
@@ -276,11 +292,19 @@ GET  /auth/google                 → 302 redirect to Google consent
 GET  /auth/google/callback?code=  → sets httpOnly cookie, 302 to app
 POST /auth/logout                 → clears cookie, 204
 GET  /auth/me                     → 200 { user } | 401
+GET  /v1/session                  → guest/auth status (never 401)
 ```
 
 `GET /auth/me` response:
 ```json
 { "user": { "id": "f3c…", "email": "ankan@hyperverge.co", "name": "Ankan", "avatarUrl": "https://…" } }
+```
+
+`GET /v1/session` response (drives the UI's guest indicator):
+```json
+{ "authenticated": false, "guest": { "remaining": 1, "limit": 2 } }
+// or, when signed in:
+{ "authenticated": true, "user": { "id": "f3c…", "email": "ankan@hyperverge.co", "name": "Ankan" } }
 ```
 
 ### 8.2 Conversations
@@ -313,6 +337,20 @@ PATCH  /v1/conversations/:id        { "title"?: string, "status"?: "active"|"arc
 }
 ```
 
+`POST /v1/conversations/import` (auth required) — persists a buffered guest conversation:
+```jsonc
+// request
+{
+  "clientConversationId": "c-local-7f…",   // optional idempotency key from the client
+  "messages": [
+    { "role": "user", "content": "Plan a 3-day trip to Kyoto" },
+    { "role": "assistant", "content": "Day 1 …" }
+  ]
+}
+// → 201: full conversation object (server-assigned id; title_source = "default")
+```
+Idempotency: re-importing the same `clientConversationId` for the same user returns the existing conversation instead of duplicating it.
+
 ### 8.3 Chat (SSE)
 
 ```
@@ -339,6 +377,15 @@ data: {"messageId":"m4","finishReason":"stop","usage":{"promptTokens":420,"compl
 ```
 
 **Cancellation** is performed by the client aborting the connection (no separate endpoint); the server reacts to connection close.
+
+**Guest variant (no persistence):**
+```
+POST /v1/guest/messages
+Body: { "messages": [ { "role": "user"|"assistant", "content": "…" } ], "content": "new user message" }
+→ 200 text/event-stream  (same event format as above)
+→ 403 { "error": "login_required", "remaining": 0 }   // guest limit reached
+```
+The client holds the full guest conversation locally and sends it on each turn (≤ `GUEST_MESSAGE_LIMIT` messages). The server enforces the cap, calls the LLM via the SDK (logged with `metadata.guestSessionId`), and streams the reply — but writes nothing to Postgres.
 
 ### 8.4 Ingestion (internal)
 
@@ -458,6 +505,8 @@ CREATE TABLE conversations (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title       TEXT NOT NULL DEFAULT 'New conversation',
+  title_source TEXT NOT NULL DEFAULT 'default'
+              CHECK (title_source IN ('default','auto','user')),
   status      TEXT NOT NULL DEFAULT 'active'
               CHECK (status IN ('active','archived')),
   provider    TEXT NOT NULL,
@@ -517,6 +566,7 @@ CREATE INDEX idx_logs_conv       ON inference_logs (conversation_id);
 - `messages.sequence` + unique constraint guarantees deterministic ordering and prevents duplicate inserts on retry.
 - `inference_logs.request_id UNIQUE` is the idempotency anchor for at-least-once Redis delivery — the worker upserts on conflict.
 - FKs from `inference_logs` use `ON DELETE SET NULL` so telemetry survives conversation/user deletion (logs are an audit trail, not owned data).
+- `conversations.title_source` records title provenance (`default`/`auto`/`user`) so auto-naming can distinguish an untouched default from a user who deliberately typed "New conversation" — never inferred from the title string.
 - `metadata JSONB` is the forward-compatible escape hatch for provider-specific fields without migrations.
 - Indexes target the exact dashboard query shapes: time-range scans (`created_at`), provider/model filters, status (error rate), and conversation drill-down.
 
@@ -533,6 +583,8 @@ CREATE INDEX idx_logs_conv       ON inference_logs (conversation_id);
 - **FE7** — **Auth**: sign-in screen; authenticated shell shows user avatar + sign-out; 401 responses redirect to sign-in.
 - **FE8** — Loading, empty, and error states for every view; no unhandled promise rejections surface to the user.
 - **FE9** — SSE consumed via `fetch` + `ReadableStream` parsing (not `EventSource`, which can't POST) — see [§17](#17-streaming-requirements).
+- **FE10** — **Guest trial**: chat works without sign-in up to the limit; a subtle "N messages left — sign in to continue" indicator (from `GET /v1/session`). The guest conversation is held in local state and mirrored to `localStorage` so a refresh doesn't lose it. On reaching the limit, a sign-in prompt replaces the composer; after sign-in the conversation is imported and the view continues uninterrupted.
+- **FE11** — Sidebar titles update to the auto-generated name once available (refetch conversation metadata on stream `done` for the first response).
 
 ---
 
@@ -547,6 +599,9 @@ CREATE INDEX idx_logs_conv       ON inference_logs (conversation_id);
 - **BE7** — Metrics endpoints compute aggregations in SQL (`percentile_cont` for latency percentiles, `date_trunc`/bucketing for time series), parameterized via Drizzle.
 - **BE8** — Structured logging (pino) with a per-request correlation id; CORS locked to the web origin; graceful shutdown drains in-flight SSE.
 - **BE9** — Connection pooling to Postgres; a single shared Redis client.
+- **BE10** — **Guest session**: issue/verify a signed httpOnly guest cookie; enforce `GUEST_MESSAGE_LIMIT` via a Redis counter keyed by guest id (with TTL); return `403 login_required` past the cap. Guest chat (`POST /v1/guest/messages`) is not persisted server-side.
+- **BE11** — `POST /v1/conversations/import` persists a buffered guest conversation for the authenticated user (idempotent on optional `clientConversationId`), then triggers auto-naming.
+- **BE12** — **Auto-naming**: after the first assistant response, if `title_source='default'`, asynchronously call the LLM (via the SDK, `metadata.kind='title_generation'`) to produce a ≤6-word title, set it, and mark `title_source='auto'`. Failures leave the default title intact and may be retried on the next response.
 
 ---
 
@@ -624,10 +679,12 @@ interface LLMProvider {
 
 - **AU1** — User auth via **Google OAuth (OIDC)**, abstracted behind an `AuthProvider` interface so other IdPs (e.g., Firebase, GitHub) can be added without touching route logic.
 - **AU2** — On successful OAuth, the user is upserted by `google_sub`; a signed **JWT is set as an httpOnly, SameSite=Lax, Secure (prod) cookie**. No server-side session store (stateless).
-- **AU3** — Auth middleware verifies the cookie on protected routes; failures return `401`.
+- **AU3** — Auth middleware verifies the session cookie on protected routes (conversations, import, dashboards) → `401` on failure. The chat path is **semi-public**: the guest endpoint accepts an anonymous guest session up to `GUEST_MESSAGE_LIMIT`, then returns `403 login_required`.
 - **AU4** — **`AUTH_MODE` env**: `google` (real OAuth) or `dev` (auto-authenticate a seeded demo user so `docker compose up` works without Google credentials — A5). The mode is logged at startup and surfaced in the UI banner in dev.
 - **AU5** — **Service-to-service**: the ingestion endpoint is protected by a static `INGESTION_API_KEY` (Bearer), separate from user auth. The SDK sends it on every ship.
 - **AU6** — Secrets (`GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `INGESTION_API_KEY`) come from env only; never sent to the browser.
+- **AU7** — **Guest sessions**: on first contact the API issues a signed httpOnly `guest_session` cookie (random `guestSessionId`, short TTL). A Redis counter `guest:{id}:count` enforces the message cap server-side; IP rate limiting backs it up. Guest conversations are not stored server-side (client local state only).
+- **AU8** — **Import on login**: after authentication the client imports its buffered guest conversation via `POST /v1/conversations/import`; authenticated users are uncapped.
 
 ```ts
 interface AuthProvider {
@@ -648,6 +705,7 @@ interface AuthProvider {
 - **IN5** — **Failure handling**: unacked entries are recovered via `XAUTOCLAIM` after an idle threshold (handles crashed consumers); malformed entries that repeatedly fail are routed to a `inference-logs-dlq` stream and acked, so the pipeline never wedges.
 - **IN6** — **Backpressure**: the receiver enqueues quickly; the worker controls its own read batch size, decoupling spikes from DB write throughput.
 - **IN7** — Worker emits structured logs + a processed/failed counter for observability.
+- **IN8** — Guest-phase inference logs carry `metadata.guestSessionId` with null `conversation_id`/`user_id` (the conversation isn't persisted until import); they still contribute to provider/model/latency/token dashboards.
 
 ---
 
@@ -676,6 +734,7 @@ Errors are normalized to a stable `code` set across providers.
 | `provider_timeout` | Provider slow/unreachable | SSE `error` | Bounded timeout; abort + log. |
 | `provider_error` | Other provider failure | SSE `error` | Generic failure message; full detail in `error_message`. |
 | `cancelled` | User abort | SSE close | Save partial; log `status=cancelled`. |
+| `login_required` | Guest message cap exceeded | 403 | Block composer; prompt sign-in. |
 | `internal_error` | Unexpected | 500 / SSE `error` | Logged with correlation id; generic message to user. |
 
 Principles:
@@ -709,6 +768,7 @@ Designed for demo scale (A1) with a documented scale-out path:
 - **SE7** — TLS terminated upstream in production (A9); internal traffic is within the compose network.
 - **SE8** — Authorization: every conversation/message/metric query is scoped to the authenticated `user_id`; no cross-user access.
 - **SE9** — Basic rate limiting on auth and chat endpoints (documented; simple in-memory limiter at demo scale).
+- **SE10** — The semi-public guest chat endpoint is abuse-guarded by the server-side cap (Redis counter, not client-trusted), IP rate limiting, and a short guest-session TTL. The cap is per-cookie and resettable by clearing cookies — acceptable for a trial (see S9).
 
 ---
 
@@ -727,7 +787,7 @@ Designed for demo scale (A1) with a documented scale-out path:
 
 - **DE3** — Migrations run automatically on `api`/worker startup (Drizzle migrate); the schema is created idempotently.
 - **DE4** — Healthchecks: `postgres`/`redis` use native checks; `api` exposes `/healthz` + `/readyz`; the worker reports readiness via a heartbeat log.
-- **DE5** — A documented `.env.example` covers: `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID/SECRET`, `JWT_SECRET`, `INGESTION_API_KEY`, `AUTH_MODE`, `GEMINI_API_KEY`, `DEFAULT_MODEL`, `CONTEXT_TOKEN_BUDGET`, `WEB_ORIGIN`.
+- **DE5** — A documented `.env.example` covers: `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID/SECRET`, `JWT_SECRET`, `INGESTION_API_KEY`, `AUTH_MODE`, `GEMINI_API_KEY`, `DEFAULT_MODEL`, `CONTEXT_TOKEN_BUDGET`, `WEB_ORIGIN`, `GUEST_MESSAGE_LIMIT`, `GUEST_SESSION_TTL`, `PII_REDACTION`.
 - **DE6** — `AUTH_MODE=dev` (default for local) enables one-command startup without Google credentials (A5).
 - **DE7** — A seed step creates the demo user (dev mode) and is safe to re-run.
 
@@ -755,6 +815,9 @@ Designed for demo scale (A1) with a documented scale-out path:
 - **JWT cookie, no session store.** Stateless and horizontally scalable; the tradeoff is no server-side revocation list (acceptable at this scale, mitigated by short expiry).
 - **SQL aggregations for dashboards.** Avoids a TSDB dependency; the documented next step if it gets slow is partitioning + pre-aggregated rollups.
 - **Previews truncated to 500 chars.** Balances dashboard usefulness against storage and PII exposure; full content stays in `messages`.
+- **Guest trial in client local state.** Anonymous conversations live in the browser (mirrored to `localStorage`), not the DB, until sign-in — zero anonymous write load and trivial cleanup, at the cost of a client-side import step on login. The cap is enforced server-side so it can't be bypassed in-session.
+- **`title_source` flag over string comparison.** Tracking title provenance (`default`/`auto`/`user`) cleanly separates "untouched default" from "user happened to type 'New conversation'", so auto-naming never clobbers an intentional title.
+- **Async auto-naming as a logged LLM call.** Title generation reuses the provider + SDK path (tagged `kind=title_generation`), so it's observable in the same dashboards and never blocks the user's response.
 
 ---
 
@@ -783,6 +846,12 @@ Designed for demo scale (A1) with a documented scale-out path:
 - [ ] **AC16** — Event-based architecture: ingestion flows through Redis Streams with a consumer group and idempotent worker.
 - [ ] **AC17** — Frontend supports cancel, list, and resume (covered by AC4, AC5).
 
+### Onboarding & Naming
+
+- [ ] **AC18** — An anonymous visitor can send up to the guest limit and receive streamed replies without signing in; the cap is enforced server-side (not bypassable by client tampering).
+- [ ] **AC19** — After the limit, the user is prompted to sign in; after signing in, the prior conversation is imported and resumes with full context.
+- [ ] **AC20** — A new conversation is auto-named from its first exchange; a conversation the user renamed (including to "New conversation") is never auto-renamed.
+
 ---
 
 ## 25. Intentional Simplifications
@@ -796,6 +865,16 @@ Called out explicitly so reviewers know these were deliberate, not oversights:
 - **S5** — No server-side session revocation (stateless JWT; short expiry mitigates).
 - **S6** — Single Redis Stream + single logical worker group; no multi-topic routing.
 - **S7** — Conversations are linear — no editing, regeneration, or branching.
-- **S8** — Previews capped at 500 chars; no configurable per-field redaction beyond a global toggle.
+- **S8** — Previews capped at 500 chars before redaction is applied.
+- **S9** — The guest message cap is per guest-session cookie + IP; clearing cookies grants a fresh trial. Acceptable for a friction-reducing trial, not a hard paywall.
+
+---
+
+## Document History
+
+| Version | Date | Changes |
+|---|---|---|
+| 1.0 | 2026-05-23 | Initial PRD: chat app, logging SDK, event-driven ingestion (Redis Streams), PostgreSQL schema, provider abstraction (Vercel AI SDK), Google OAuth, streaming/cancel, dashboards, deployment, tradeoffs, acceptance criteria. |
+| 1.1 | 2026-05-23 | Anonymous guest trial (client-local conversation, server-enforced cap, import-on-login) and LLM auto-naming of conversations via a `title_source` flag. |
 ```
 
