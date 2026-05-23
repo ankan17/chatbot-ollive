@@ -14,6 +14,8 @@ import Composer, { type ComposerHandle } from './Composer.js';
 import ChatHero from './ChatHero.js';
 import Sidebar from './Sidebar.js';
 import AppShell from './AppShell.js';
+import ModelSwitcher from './ModelSwitcher.js';
+import { getStoredModel } from '../api/models.js';
 import GuestBanner from './GuestBanner.js';
 import GuestSignInPrompt from './GuestSignInPrompt.js';
 import Spinner from './states/Spinner.js';
@@ -68,8 +70,8 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
 
   const handleSend = useCallback(async (content: string) => {
     if (!conversationId) {
-      // No conversation yet — create, navigate, then send on mount
-      const conv = await createConversation();
+      // No conversation yet — create with the selected model, navigate, then send on mount
+      const conv = await createConversation({ model: getStoredModel() });
       sessionStorage.setItem('ollive.pendingSend', content);
       navigate(`/c/${conv.id}`);
     } else {
@@ -192,6 +194,7 @@ export default function ChatView() {
     <AppShell
       user={user!}
       onSignOut={() => void signOut()}
+      topbar={<ModelSwitcher />}
       sidebar={
         <Sidebar
           conversations={conversations.items}

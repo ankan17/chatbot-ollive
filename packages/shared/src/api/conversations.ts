@@ -50,6 +50,7 @@ export type ListConversationsQuery = z.infer<typeof listConversationsQuerySchema
 /** POST /v1/conversations body. */
 export const createConversationSchema = z.object({
   title: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
 });
 export type CreateConversationBody = z.infer<typeof createConversationSchema>;
 
@@ -58,9 +59,10 @@ export const patchConversationSchema = z
   .object({
     title: z.string().min(1).optional(),
     status: conversationStatus.optional(),
+    model: z.string().min(1).optional(),
   })
-  .refine((b) => b.title !== undefined || b.status !== undefined, {
-    message: 'at least one of title or status is required',
+  .refine((b) => b.title !== undefined || b.status !== undefined || b.model !== undefined, {
+    message: 'at least one of title, status, or model is required',
   });
 export type PatchConversationBody = z.infer<typeof patchConversationSchema>;
 

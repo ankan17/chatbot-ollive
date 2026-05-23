@@ -30,6 +30,8 @@ export type {
   AppErrorCode,
   ApiErrorBody,
   LoginRequiredBody,
+  ModelInfo,
+  ModelsResponse,
 } from '@ollive/shared/api';
 
 // Convenience aliases

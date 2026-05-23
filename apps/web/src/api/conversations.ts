@@ -22,7 +22,7 @@ export function listConversations(
   });
 }
 
-export function createConversation(input?: { title?: string }): Promise<Conversation> {
+export function createConversation(input?: { title?: string; model?: string }): Promise<Conversation> {
   return request<Conversation>('/v1/conversations', { method: 'POST', body: input ?? {} });
 }
 

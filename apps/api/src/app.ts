@@ -15,6 +15,7 @@ import { createUserRepository } from './users/repository.js';
 import { createConversationRepository } from './conversations/repository.js';
 import { authRouter } from './routes/auth.js';
 import { conversationsRouter } from './routes/conversations.js';
+import { modelsRouter } from './routes/models.js';
 import { chatRouter } from './routes/chat.js';
 import { guestChatRouter } from './routes/guest.js';
 import { metricsRouter } from './routes/metrics.js';
@@ -85,6 +86,9 @@ export function createApp(deps: AppDeps): express.Express {
 
   // 9. Conversations CRUD + import router (Plan 4): mounted at /v1
   app.use('/v1', conversationsRouter({ config, conversations: conversationRepo }));
+
+  // 9b. Available models (for the model switcher)
+  app.use('/v1', modelsRouter({ config }));
 
   // 10. Chat + Guest SSE endpoints (Plan 5): only mounted when a provider is present
   if (deps.chatProvider) {
