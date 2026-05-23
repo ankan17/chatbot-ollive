@@ -92,25 +92,28 @@ export default function ConversationListItem({
       </button>
 
       {menuOpen && (
-        <div className={styles.dropdown} onClick={(e) => e.stopPropagation()}>
-          <button
-            className={styles.dropdownItem}
-            onClick={() => openRename()}
-            type="button"
-          >
-            Rename
-          </button>
-          <button
-            className={styles.dropdownItem}
-            onClick={() => {
-              onArchive(!isArchived);
-              setMenuOpen(false);
-            }}
-            type="button"
-          >
-            {isArchived ? 'Unarchive' : 'Archive'}
-          </button>
-        </div>
+        <>
+          <div className={styles.scrim} onClick={() => setMenuOpen(false)} aria-hidden="true" />
+          <div className={styles.dropdown} onClick={(e) => e.stopPropagation()}>
+            <button
+              className={styles.dropdownItem}
+              onClick={() => openRename()}
+              type="button"
+            >
+              Rename
+            </button>
+            <button
+              className={styles.dropdownItem}
+              onClick={() => {
+                onArchive(!isArchived);
+                setMenuOpen(false);
+              }}
+              type="button"
+            >
+              {isArchived ? 'Unarchive' : 'Archive'}
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

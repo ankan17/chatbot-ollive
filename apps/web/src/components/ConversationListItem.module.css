@@ -86,18 +86,23 @@
   opacity: 1;
 }
 
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+}
+
 .dropdown {
   position: absolute;
   right: var(--space-2);
   top: 100%;
-  background: var(--color-bg-elevated);
+  background: linear-gradient(var(--color-bg-elevated), var(--color-bg-elevated)), var(--color-bg-base);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   z-index: 10;
   min-width: 9rem;
   overflow: hidden;
-  backdrop-filter: blur(12px);
 }
 
 .dropdownItem {
