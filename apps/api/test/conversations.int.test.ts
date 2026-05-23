@@ -20,6 +20,7 @@ const config = loadConfig({
   AUTH_MODE: 'dev',
   WEB_ORIGIN: 'http://localhost:5173',
   NODE_ENV: 'test',
+  GEMINI_API_KEY: 'dummy-gemini-key-for-tests',
 });
 
 let db: ReturnType<typeof createDb>;

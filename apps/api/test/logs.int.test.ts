@@ -15,6 +15,7 @@ const env = {
   REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
   INGESTION_API_KEY: TEST_API_KEY,
   JWT_SECRET: 'test-jwt-secret-for-logs',
+  GEMINI_API_KEY: 'dummy-gemini-key-for-tests',
 };
 
 const config = loadConfig(env);
