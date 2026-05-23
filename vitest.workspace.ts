@@ -8,6 +8,7 @@ export default defineWorkspace([
       root: './packages/db',
       testTimeout: 30000,
       fileParallelism: false,
+      setupFiles: ['./test/test-db-setup.ts'],
     },
   },
   { test: { name: 'llm-sdk', root: './packages/llm-sdk' } },
@@ -17,6 +18,7 @@ export default defineWorkspace([
       root: './apps/api',
       testTimeout: 30000,
       fileParallelism: false,
+      setupFiles: ['./test/test-db-setup.ts'],
     },
   },
   {
@@ -25,6 +27,7 @@ export default defineWorkspace([
       root: './apps/ingestion-worker',
       testTimeout: 30000,
       fileParallelism: false,
+      setupFiles: ['./test/test-db-setup.ts'],
     },
   },
   './apps/web/vite.config.ts',
