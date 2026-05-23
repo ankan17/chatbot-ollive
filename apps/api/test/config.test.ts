@@ -8,6 +8,7 @@ const validEnv = {
   PORT: '4001',
   INGESTION_STREAM_MAXLEN: '50000',
   JWT_SECRET: 'super-secret-key-for-testing',
+  GEMINI_API_KEY: 'dummy-gemini-key-for-tests',
 };
 
 describe('loadConfig', () => {
@@ -98,5 +99,41 @@ describe('loadConfig', () => {
     expect(() =>
       loadConfig({ ...validEnv, WEB_ORIGIN: 'not-a-url' }),
     ).toThrowError(/WEB_ORIGIN/);
+  });
+
+  // --- Plan 5: chat config keys ---
+
+  it('valid env including chat keys → geminiApiKey, contextTokenBudget, piiRedaction mapped', () => {
+    const cfg = loadConfig({
+      ...validEnv,
+      GEMINI_API_KEY: 'my-gemini-key',
+      CONTEXT_TOKEN_BUDGET: '8000',
+      PII_REDACTION: 'llm',
+    });
+    expect(cfg.geminiApiKey).toBe('my-gemini-key');
+    expect(cfg.contextTokenBudget).toBe(8000);
+    expect(cfg.piiRedaction).toBe('llm');
+  });
+
+  it('missing CONTEXT_TOKEN_BUDGET and PII_REDACTION → defaults 4000 and "pattern"', () => {
+    const cfg = loadConfig(validEnv);
+    expect(cfg.contextTokenBudget).toBe(4000);
+    expect(cfg.piiRedaction).toBe('pattern');
+  });
+
+  it('CONTEXT_TOKEN_BUDGET="8000" → coerced to number 8000', () => {
+    const cfg = loadConfig({ ...validEnv, CONTEXT_TOKEN_BUDGET: '8000' });
+    expect(cfg.contextTokenBudget).toBe(8000);
+  });
+
+  it('missing GEMINI_API_KEY → throws mentioning GEMINI_API_KEY', () => {
+    const { GEMINI_API_KEY: _k, ...env } = validEnv;
+    expect(() => loadConfig(env)).toThrowError(/GEMINI_API_KEY/);
+  });
+
+  it('PII_REDACTION="bogus" → throws (enum violation)', () => {
+    expect(() =>
+      loadConfig({ ...validEnv, PII_REDACTION: 'bogus' }),
+    ).toThrowError(/PII_REDACTION/);
   });
 });

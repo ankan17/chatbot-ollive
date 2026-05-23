@@ -19,6 +19,12 @@ const envSchema = z.object({
   GUEST_SESSION_TTL: z.coerce.number().int().positive().default(86400),
   // Model
   DEFAULT_MODEL: z.string().min(1).default('gemini-2.5-flash'),
+  // Chat (Plan 5)
+  // GEMINI_API_KEY is required at startup even though tests supply a dummy value + inject a fake
+  // provider — the production wiring reads it to construct googleProviderFactory().
+  GEMINI_API_KEY: z.string().min(1),
+  CONTEXT_TOKEN_BUDGET: z.coerce.number().int().positive().default(4000),
+  PII_REDACTION: z.enum(['off', 'pattern', 'llm']).default('pattern'),
   // Environment
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
@@ -39,6 +45,12 @@ export interface AppConfig {
   guestSessionTtl: number;
   /** A10 — default 'gemini-2.5-flash'; new conversations use provider='google' + this model. Plan 5 READS this; never re-adds it. */
   defaultModel: string;
+  /** GEMINI_API_KEY — required at startup; production wiring reads it to construct googleProviderFactory(). Tests supply a dummy + inject a fake provider. */
+  geminiApiKey: string;
+  /** CONTEXT_TOKEN_BUDGET — max prompt tokens for the context window (A3/BE5); default 4000. */
+  contextTokenBudget: number;
+  /** PII_REDACTION — SDK redaction strategy; default 'pattern'. */
+  piiRedaction: 'off' | 'pattern' | 'llm';
   nodeEnv: 'development' | 'production' | 'test';
 }
 
@@ -83,6 +95,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     guestMessageLimit: data.GUEST_MESSAGE_LIMIT,
     guestSessionTtl: data.GUEST_SESSION_TTL,
     defaultModel: data.DEFAULT_MODEL,
+    geminiApiKey: data.GEMINI_API_KEY,
+    contextTokenBudget: data.CONTEXT_TOKEN_BUDGET,
+    piiRedaction: data.PII_REDACTION,
     nodeEnv: data.NODE_ENV,
   };
 }
