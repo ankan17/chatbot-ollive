@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Conversation } from '../api/types.js';
 import RelativeTime from './RelativeTime.js';
 import styles from './ConversationListItem.module.css';
@@ -23,6 +23,54 @@ export default function ConversationListItem({
   const [renameValue, setRenameValue] = useState(conversation.title);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Typewriter the title when it changes — primarily the auto-name that lands
+  // after the first reply. Skipped on first mount and for the user's own rename.
+  const [displayTitle, setDisplayTitle] = useState(conversation.title);
+  const [typing, setTyping] = useState(false);
+  const prevTitleRef = useRef(conversation.title);
+  const skipAnimateRef = useRef(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const next = conversation.title;
+    if (next === prevTitleRef.current) return;
+    prevTitleRef.current = next;
+
+    const skip = skipAnimateRef.current;
+    skipAnimateRef.current = false;
+
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    if (skip || reduceMotion || !next) {
+      setTyping(false);
+      setDisplayTitle(next);
+      return;
+    }
+
+    // Reveal one character at a time (~28ms each → ~0.6s for a short title).
+    let i = 0;
+    setTyping(true);
+    setDisplayTitle('');
+    intervalRef.current = setInterval(() => {
+      i += 1;
+      setDisplayTitle(next.slice(0, i));
+      if (i >= next.length) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = null;
+        setTyping(false);
+      }
+    }, 28);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [conversation.title]);
+
   function openRename() {
     setRenameValue(conversation.title);
     setRenaming(true);
@@ -32,6 +80,8 @@ export default function ConversationListItem({
   function commitRename() {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== conversation.title) {
+      // Don't typewriter the user's own rename — they just typed it.
+      skipAnimateRef.current = true;
       onRename(trimmed);
     }
     setRenaming(false);
@@ -74,7 +124,10 @@ export default function ConversationListItem({
             autoFocus
           />
         ) : (
-          <span className={styles.title}>{conversation.title}</span>
+          <span className={styles.title}>
+            {displayTitle}
+            {typing && <span className={styles.caret} aria-hidden="true" />}
+          </span>
         )}
         <RelativeTime iso={conversation.updatedAt} className={styles.time} />
       </button>
