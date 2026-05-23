@@ -3,6 +3,7 @@ import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { createRedis } from './redis.js';
 import { createApp } from './app.js';
+import { createUserRepository } from './users/repository.js';
 import type { Server } from 'node:http';
 
 async function main(): Promise<void> {
@@ -15,6 +16,17 @@ async function main(): Promise<void> {
 
   const db = createDb(config.databaseUrl);
   const redis = createRedis(config.redisUrl);
+
+  // DE7: Seed demo user in dev mode (idempotent — safe to re-run on each restart)
+  if (config.authMode === 'dev') {
+    try {
+      await createUserRepository(db).seedDemoUser();
+      logger.info('demo user seeded (dev mode)');
+    } catch (err) {
+      logger.warn({ err }, 'failed to seed demo user — non-fatal, will retry on next dev login');
+    }
+  }
+
   const app = createApp({ db, redis, config, logger });
 
   const server: Server = app.listen(config.port, () => {

@@ -10,6 +10,11 @@ import { correlationId } from './middleware/correlation.js';
 import { healthRouter } from './routes/health.js';
 import { logsRouter } from './routes/logs.js';
 import { AppError, errorHandler } from './errors.js';
+import { createAuthProvider, type AuthProvider } from './auth/provider.js';
+import { createUserRepository } from './users/repository.js';
+import { createConversationRepository } from './conversations/repository.js';
+import { authRouter } from './routes/auth.js';
+import { conversationsRouter } from './routes/conversations.js';
 // Import types.ts side-effect: augments Express.Request with req.user and req.guest
 import './types.js';
 
@@ -18,11 +23,16 @@ export interface AppDeps {
   redis: Redis;
   config: AppConfig;
   logger?: Logger;
+  /** Optional injected AuthProvider (DI seam for tests — default: createAuthProvider(config)) */
+  authProvider?: AuthProvider;
 }
 
 export function createApp(deps: AppDeps): express.Express {
   const { db, redis, config } = deps;
   const logger = deps.logger ?? createLogger();
+  const authProvider = deps.authProvider ?? createAuthProvider(config);
+  const users = createUserRepository(db);
+  const conversationRepo = createConversationRepository(db);
 
   const app = express();
 
@@ -64,7 +74,13 @@ export function createApp(deps: AppDeps): express.Express {
   };
   app.use('/v1', logsRouter(logsRouterDeps));
 
-  // FUTURE (Plan 4/5): auth, conversations, chat, and metrics routers mount here
+  // 8. Auth routes (Plan 4): /auth/google, /auth/google/callback, /auth/logout, /auth/me, /v1/session
+  app.use(authRouter({ config, redis, users, authProvider }));
+
+  // 9. Conversations CRUD + import router (Plan 4): mounted at /v1
+  app.use('/v1', conversationsRouter({ config, conversations: conversationRepo }));
+
+  // FUTURE (Plan 5): chat (SSE) and metrics routers mount here
 
   // 8. 404 fallback
   app.use((_req, _res, next) => {
