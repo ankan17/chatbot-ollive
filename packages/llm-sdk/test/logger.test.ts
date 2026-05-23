@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { inferenceLogSchema, PREVIEW_MAX_CHARS } from '@ollive/shared';
 import { FakeProvider } from './fakes.js';
-import { withLogging } from '../src/logging/logger.js';
+import { withLogging, withLoggingTransport } from '../src/logging/logger.js';
 import type { LogSink } from '../src/logging/logger.js';
 import type { InferenceLog } from '@ollive/shared';
 import type { StreamChunk } from '../src/types.js';
+import { BufferedHttpTransport } from '../src/transport/transport.js';
 
 // Shared base config
 const BASE_CONFIG = {
@@ -116,8 +117,10 @@ describe('withLogging', () => {
       { delta: 'first' },
       { delta: 'second' },
     ];
+    // Note: controller.signal is passed so withLogging can check signal.aborted, but the actual
+    // cancellation is driven by FakeProvider throwing an AbortError after 1 chunk (abortAfter: 1).
+    // controller.abort() is never called here; the AbortError is synthesized by FakeProvider.
     const controller = new AbortController();
-    // Provider throws AbortError after 1 chunk
     const fake = new FakeProvider(chunks, { abortAfter: 1 });
     const { sink, logs } = makeSink();
     const provider = withLogging(fake, BASE_CONFIG, sink);
@@ -242,5 +245,25 @@ describe('withLogging', () => {
     expect(meta['temperature']).toBe(0.7);
     expect(meta['maxOutputTokens']).toBe(1024);
     expect(meta['stream']).toBe(true);
+  });
+});
+
+describe('withLoggingTransport', () => {
+  it('smoke: returned provider.name matches wrapped provider, transport is BufferedHttpTransport', async () => {
+    const fake = new FakeProvider([]);
+    const { provider, transport } = withLoggingTransport(fake, {
+      ...BASE_CONFIG,
+      ingestionUrl: 'http://unused.local/v1/logs',
+      apiKey: 'test-key',
+    });
+
+    // Provider name is preserved from the wrapped provider
+    expect(provider.name).toBe(fake.name);
+
+    // Transport is a BufferedHttpTransport instance
+    expect(transport).toBeInstanceOf(BufferedHttpTransport);
+
+    // Close the transport so the background timer does not leak across tests
+    await transport.close();
   });
 });

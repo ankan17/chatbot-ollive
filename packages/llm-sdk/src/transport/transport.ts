@@ -38,7 +38,7 @@ export class BufferedHttpTransport implements LogSink {
   private readonly fetchFn: typeof fetch;
 
   private readonly buffer: InferenceLog[] = [];
-  private flushing = false;
+  private flushPromise: Promise<void> | null = null;
   private closed = false;
   private readonly timer: ReturnType<typeof setInterval>;
 
@@ -89,25 +89,29 @@ export class BufferedHttpTransport implements LogSink {
 
   /**
    * Drains the buffer, sending each log with retry. Never throws.
-   * Re-entrancy guarded — concurrent calls return early.
+   * Re-entrancy guarded — concurrent calls return (and await) the in-progress flush.
    */
-  async flush(): Promise<void> {
-    if (this.flushing) return;
-    this.flushing = true;
-    try {
-      while (this.buffer.length > 0) {
-        const log = this.buffer.shift()!;
-        await this.shipWithRetry(log);
+  flush(): Promise<void> {
+    if (this.flushPromise !== null) return this.flushPromise;
+    this.flushPromise = (async () => {
+      try {
+        while (this.buffer.length > 0) {
+          const log = this.buffer.shift()!;
+          await this.shipWithRetry(log);
+        }
+      } finally {
+        this.flushPromise = null;
       }
-    } finally {
-      this.flushing = false;
-    }
+    })();
+    return this.flushPromise;
   }
 
   /** Stops the background timer and performs a final flush. */
   async close(): Promise<void> {
     this.closed = true;
     clearInterval(this.timer);
+    // Await any in-progress flush started by the background timer, then drain remainder.
+    await (this.flushPromise ?? Promise.resolve());
     await this.flush();
   }
 
@@ -127,8 +131,8 @@ export class BufferedHttpTransport implements LogSink {
           body: JSON.stringify(log),
         });
 
-        if (response.ok || response.status === 202) {
-          // Successfully delivered
+        if (response.ok) {
+          // Successfully delivered (2xx)
           return;
         }
 

@@ -213,6 +213,6 @@ export function createRedactor(
   if (override !== undefined) return override;
   if (mode === 'off') return new NoopRedactor();
   if (mode === 'pattern') return new PatternRedactor();
-  // 'llm' without override — degrade to PatternRedactor
-  return new PatternRedactor();
+  // 'llm' without override — LlmRedactor with no classify fn degrades to pure pattern behavior
+  return new LlmRedactor();
 }

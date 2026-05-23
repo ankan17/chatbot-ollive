@@ -3,6 +3,7 @@ import { inferenceLogSchema, PREVIEW_MAX_CHARS } from '@ollive/shared';
 import type { InferenceLog } from '@ollive/shared';
 import type { LLMProvider, ChatRequest, StreamChunk, CallContext, InferenceLoggerConfig } from '../types.js';
 import { createRedactor } from '../redaction/redactor.js';
+import { BufferedHttpTransport } from '../transport/transport.js';
 
 // ---------------------------------------------------------------------------
 // LogSink — injectable seam; Task 5's BufferedHttpTransport implements this
@@ -104,7 +105,7 @@ export function withLogging(
         if (ctx.userId) context.userId = ctx.userId;
 
         // Build metadata (caller metadata + instrumentation fields)
-        const callerMetadata = (ctx.metadata as Record<string, unknown>) ?? {};
+        const callerMetadata = ctx.metadata ?? {};
         const metadata: Record<string, unknown> = {
           ...callerMetadata,
           stream: true,
@@ -145,11 +146,9 @@ export function withLogging(
 
       try {
         for await (const chunk of provider.streamChat(req, opts)) {
-          // Capture TTFT on first delta
-          if (chunk.delta !== undefined && ttftMs === undefined) {
-            ttftMs = Date.now() - startedAtMs;
-            outputText += chunk.delta;
-          } else if (chunk.delta !== undefined) {
+          // Capture TTFT on first delta, accumulate all deltas
+          if (chunk.delta !== undefined) {
+            if (ttftMs === undefined) ttftMs = Date.now() - startedAtMs;
             outputText += chunk.delta;
           }
 
@@ -164,8 +163,7 @@ export function withLogging(
         // Normal completion
         ship();
       } catch (err: unknown) {
-        const error = err as Error;
-        const aborted = error.name === 'AbortError' || opts?.signal?.aborted;
+        const aborted = (err instanceof Error && err.name === 'AbortError') || opts?.signal?.aborted;
         if (aborted) {
           status = 'cancelled';
           errorPayload = null;
@@ -173,7 +171,7 @@ export function withLogging(
           status = 'error';
           errorPayload = {
             code: 'provider_error',
-            message: error.message ?? 'provider error',
+            message: err instanceof Error ? err.message : String(err),
           };
         }
         ship();
@@ -186,8 +184,6 @@ export function withLogging(
 // ---------------------------------------------------------------------------
 // withLoggingTransport — convenience factory (Task 5)
 // ---------------------------------------------------------------------------
-
-import { BufferedHttpTransport } from '../transport/transport.js';
 
 /**
  * Convenience factory: constructs a BufferedHttpTransport from config,

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   PatternRedactor,
   NoopRedactor,
+  LlmRedactor,
   createRedactor,
 } from '../src/redaction/redactor.js';
 
@@ -113,12 +114,44 @@ describe('createRedactor', () => {
     expect(createRedactor('pattern')).toBeInstanceOf(PatternRedactor);
   });
 
-  it("'llm' without override degrades to PatternRedactor", () => {
-    expect(createRedactor('llm')).toBeInstanceOf(PatternRedactor);
+  it("'llm' without override returns LlmRedactor (degrades to pattern behavior at runtime)", () => {
+    expect(createRedactor('llm')).toBeInstanceOf(LlmRedactor);
   });
 
   it('with override, returns exact custom instance', () => {
     const custom = new PatternRedactor();
     expect(createRedactor('pattern', custom)).toBe(custom);
+  });
+});
+
+describe('LlmRedactor with classify function', () => {
+  it('runs classify on pattern-redacted text, merges counts from both passes, and raw PII is absent', () => {
+    // A classify fn that replaces a magic token "<<JOHN>>" with [NAME]
+    const classify = (text: string): { text: string; counts: Record<string, number> } => {
+      let count = 0;
+      const replaced = text.replace(/<<JOHN>>/g, () => {
+        count++;
+        return '[NAME]';
+      });
+      return { text: replaced, counts: count > 0 ? { name: count } : {} };
+    };
+
+    const redactor = new LlmRedactor(new PatternRedactor(), classify);
+
+    // Input contains an email (caught by pattern pass) and the magic token (caught by classify pass)
+    const input = 'Contact ankan@hyperverge.co or <<JOHN>> for details';
+    const { text, counts } = redactor.redact(input);
+
+    // Pattern pass replaced the email; classify pass replaced the token
+    expect(counts.email).toBe(1);
+    expect(counts.name).toBe(1);
+
+    // Raw PII is gone
+    expect(text).not.toContain('ankan@hyperverge.co');
+    expect(text).not.toContain('<<JOHN>>');
+
+    // Placeholders are present
+    expect(text).toContain('[EMAIL]');
+    expect(text).toContain('[NAME]');
   });
 });

@@ -36,6 +36,7 @@ function normalizeFinishReason(r: string | undefined): StreamChunk['finishReason
     case 'content-filter':
     case 'content_filter': return 'content_filter';
     case 'error': return 'error';
+    case 'cancelled': return 'cancelled';
     default: return 'stop';
   }
 }
