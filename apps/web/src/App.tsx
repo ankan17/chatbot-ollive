@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { SessionProvider } from './state/sessionContext.js';
 
 // Placeholder components — replaced in later tasks (Parts B & C)
 function ChatView() {
@@ -13,12 +14,14 @@ function SignInScreen() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<ChatView />} />
-      <Route path="/c/:id" element={<ChatView />} />
-      <Route path="/dashboards" element={<Dashboards />} />
-      <Route path="/sign-in" element={<SignInScreen />} />
-      <Route path="*" element={<Navigate to="/" />} />
-    </Routes>
+    <SessionProvider>
+      <Routes>
+        <Route path="/" element={<ChatView />} />
+        <Route path="/c/:id" element={<ChatView />} />
+        <Route path="/dashboards" element={<Dashboards />} />
+        <Route path="/sign-in" element={<SignInScreen />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
+    </SessionProvider>
   );
 }
