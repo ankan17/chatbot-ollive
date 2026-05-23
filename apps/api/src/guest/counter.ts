@@ -9,7 +9,9 @@ export const guestKey = (guestId: string): string => `guest:${guestId}:count`;
 
 /**
  * Increment the guest message counter and check against the cap.
- * Uses atomic INCR; TTL is set only on first increment (sliding-from-first-use window).
+ * Uses an atomic pipeline (INCR + EXPIRE in one round-trip) so the TTL is always
+ * set — a crash between INCR and EXPIRE can never leave a key without a TTL.
+ * This makes the window a sliding window from each use, which is acceptable.
  *
  * Pinned contract: Plan 5 calls this per guest turn.
  */
@@ -20,12 +22,12 @@ export async function checkAndIncrementGuest(
   ttlSeconds: number,
 ): Promise<{ allowed: boolean; remaining: number }> {
   const key = guestKey(guestId);
-  const n = await redis.incr(key);
 
-  // Set TTL only on first increment so the window starts on first use
-  if (n === 1) {
-    await redis.expire(key, ttlSeconds);
-  }
+  // Atomic pipeline: INCR then EXPIRE always, so no TTL-less key can survive a crash
+  const res = await redis.multi().incr(key).expire(key, ttlSeconds).exec();
+
+  // res is an array of [error, value] pairs; first command is INCR → res[0][1]
+  const n = (res?.[0]?.[1] as number) ?? 0;
 
   const allowed = n <= limit;
   const remaining = Math.max(0, limit - n);

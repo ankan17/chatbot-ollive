@@ -70,7 +70,7 @@ export function guestSession(deps: GuestMiddlewareDeps): RequestHandler {
     }
 
     // Issue or re-issue the cookie when needed
-    if (needsIssuance || !rawCookie) {
+    if (needsIssuance) {
       res.cookie(GUEST_COOKIE, signGuestId(guestId!, config.jwtSecret), {
         httpOnly: true,
         sameSite: 'lax',

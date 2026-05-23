@@ -4,8 +4,10 @@ import type { AuthProvider, AuthIdentity } from './provider.js';
 export class GoogleAuthProvider implements AuthProvider {
   readonly name = 'google';
   private client: OAuth2Client;
+  private clientId: string;
 
   constructor(opts: { clientId: string; clientSecret: string; redirectUri: string }) {
+    this.clientId = opts.clientId;
     this.client = new OAuth2Client({
       clientId: opts.clientId,
       clientSecret: opts.clientSecret,
@@ -30,7 +32,7 @@ export class GoogleAuthProvider implements AuthProvider {
 
     const ticket = await this.client.verifyIdToken({
       idToken: tokens.id_token,
-      audience: this.client._clientId,
+      audience: this.clientId,
     });
 
     const payload = ticket.getPayload();

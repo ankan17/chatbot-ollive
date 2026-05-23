@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import request from 'supertest';
 import Redis from 'ioredis';
+import { SignJWT } from 'jose';
 import { runMigrations, createDb, users as usersTable } from '@ollive/db';
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
@@ -227,6 +228,26 @@ describe('GET /v1/session', () => {
     expect(sessionRes.body.user.email).toBe('demo@ollive.local');
     // Slim SessionUser — no avatarUrl
     expect(sessionRes.body.user.avatarUrl).toBeUndefined();
+  });
+});
+
+describe('GET /auth/me — expired JWT (I5)', () => {
+  it('expired session token → 401 { error: "unauthorized" }', async () => {
+    // Sign a JWT that already expired (nbf/exp in the past)
+    const secretKey = new TextEncoder().encode(config.jwtSecret);
+    const expiredToken = await new SignJWT({ email: 'expired@test.com' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject('some-user-id')
+      .setIssuedAt(Math.floor(Date.now() / 1000) - 3600) // issued 1 hour ago
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 1800) // expired 30 minutes ago
+      .sign(secretKey);
+
+    const res = await request(app)
+      .get('/auth/me')
+      .set('Cookie', `session=${expiredToken}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('unauthorized');
   });
 });
 

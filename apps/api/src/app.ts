@@ -82,12 +82,12 @@ export function createApp(deps: AppDeps): express.Express {
 
   // FUTURE (Plan 5): chat (SSE) and metrics routers mount here
 
-  // 8. 404 fallback
+  // 10. 404 fallback
   app.use((_req, _res, next) => {
     next(new AppError('not_found', 'Route not found'));
   });
 
-  // 9. Centralized error handler — MUST be last
+  // 11. Centralized error handler — MUST be last
   app.use(errorHandler(logger));
 
   return app;

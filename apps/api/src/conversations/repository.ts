@@ -77,7 +77,7 @@ export function createConversationRepository(db: Db): ConversationRepository {
             // Cursor-based pagination: if cursor provided, fetch rows after the cursor item
             cursor
               ? sql`(${conversations.updatedAt}, ${conversations.id}) < (
-                  SELECT updated_at, id FROM conversations WHERE id = ${cursor}
+                  SELECT updated_at, id FROM conversations WHERE id = ${cursor} AND user_id = ${userId}
                 )`
               : undefined,
           ),
@@ -133,6 +133,8 @@ export function createConversationRepository(db: Db): ConversationRepository {
       if (convRows.length === 0) return null;
 
       const conv = convRows[0]!;
+      // Safe: conv is already user-scoped (fetched above with eq(userId)), so any messages
+      // belonging to this conversation ID are guaranteed to belong to the requesting user.
       const msgRows = await db
         .select()
         .from(messages)
