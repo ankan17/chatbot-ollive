@@ -6,11 +6,15 @@ import { bucketToInterval } from './params.js';
 /**
  * Build a WHERE clause for the given filters.
  * Every user value is bound as a SQL parameter — no string interpolation (SE5).
+ * Dates are passed as ISO strings since postgres.js does not accept raw Date objects
+ * via db.execute() (only the ORM layer coerces them; raw SQL bypass requires strings).
  */
 export function whereClause(f: MetricFilters): SQL {
+  const fromStr = f.from.toISOString();
+  const toStr = f.to.toISOString();
   const parts: SQL[] = [
-    sql`${inferenceLogs.createdAt} >= ${f.from}`,
-    sql`${inferenceLogs.createdAt} < ${f.to}`,
+    sql`${inferenceLogs.createdAt} >= ${fromStr}::timestamptz`,
+    sql`${inferenceLogs.createdAt} < ${toStr}::timestamptz`,
     sql`${inferenceLogs.userId} = ${f.userId}`,
   ];
   if (f.provider !== undefined) {
@@ -28,8 +32,8 @@ export function whereClause(f: MetricFilters): SQL {
  */
 function dateBin(f: MetricFilters): SQL {
   const interval = bucketToInterval(f.bucket);
-  const anchor = new Date(0); // epoch anchor
-  return sql`date_bin(${interval}::interval, ${inferenceLogs.createdAt}, ${anchor})`;
+  const anchorStr = new Date(0).toISOString(); // epoch anchor as ISO string
+  return sql`date_bin(${interval}::interval, ${inferenceLogs.createdAt}, ${anchorStr}::timestamptz)`;
 }
 
 /** Overview aggregate query — single row. */

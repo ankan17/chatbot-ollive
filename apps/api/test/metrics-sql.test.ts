@@ -77,12 +77,12 @@ describe('SQL builders — parameterized (SE5)', () => {
     bucket: '1m',
   };
 
-  it('whereClause params include from, to, userId — no string interpolation', () => {
+  it('whereClause params include from (as ISO string), to (as ISO string), userId — no string interpolation', () => {
     const q = whereClause(filters);
     const { params } = toQuery(q);
-    // from, to, userId should all appear as params
-    expect(params).toContain(filters.from);
-    expect(params).toContain(filters.to);
+    // from, to as ISO strings; userId as string — all params (no inlining)
+    expect(params).toContain(filters.from.toISOString());
+    expect(params).toContain(filters.to.toISOString());
     expect(params).toContain(filters.userId);
   });
 
@@ -100,43 +100,43 @@ describe('SQL builders — parameterized (SE5)', () => {
     expect(params).toContain('gemini-2.5-flash');
   });
 
-  it('overviewQuery returns SQL object with from/to/userId params', () => {
+  it('overviewQuery returns SQL object with from/to (ISO strings) and userId params', () => {
     const q = overviewQuery(filters);
     const { params } = toQuery(q);
-    expect(params).toContain(filters.from);
-    expect(params).toContain(filters.to);
+    expect(params).toContain(filters.from.toISOString());
+    expect(params).toContain(filters.to.toISOString());
     expect(params).toContain(filters.userId);
   });
 
-  it('latencySeriesQuery returns SQL with from/to/userId params', () => {
+  it('latencySeriesQuery returns SQL with from/to (ISO strings) and userId params', () => {
     const q = latencySeriesQuery(filters);
     const { params } = toQuery(q);
-    expect(params).toContain(filters.from);
-    expect(params).toContain(filters.to);
+    expect(params).toContain(filters.from.toISOString());
+    expect(params).toContain(filters.to.toISOString());
     expect(params).toContain(filters.userId);
   });
 
-  it('throughputSeriesQuery returns SQL with from/to/userId params', () => {
+  it('throughputSeriesQuery returns SQL with from/to (ISO strings) and userId params', () => {
     const q = throughputSeriesQuery(filters);
     const { params } = toQuery(q);
-    expect(params).toContain(filters.from);
-    expect(params).toContain(filters.to);
+    expect(params).toContain(filters.from.toISOString());
+    expect(params).toContain(filters.to.toISOString());
     expect(params).toContain(filters.userId);
   });
 
-  it('errorSeriesQuery returns SQL with from/to/userId params', () => {
+  it('errorSeriesQuery returns SQL with from/to (ISO strings) and userId params', () => {
     const q = errorSeriesQuery(filters);
     const { params } = toQuery(q);
-    expect(params).toContain(filters.from);
-    expect(params).toContain(filters.to);
+    expect(params).toContain(filters.from.toISOString());
+    expect(params).toContain(filters.to.toISOString());
     expect(params).toContain(filters.userId);
   });
 
-  it('tokenSeriesQuery returns SQL with from/to/userId params', () => {
+  it('tokenSeriesQuery returns SQL with from/to (ISO strings) and userId params', () => {
     const q = tokenSeriesQuery(filters);
     const { params } = toQuery(q);
-    expect(params).toContain(filters.from);
-    expect(params).toContain(filters.to);
+    expect(params).toContain(filters.from.toISOString());
+    expect(params).toContain(filters.to.toISOString());
     expect(params).toContain(filters.userId);
   });
 
