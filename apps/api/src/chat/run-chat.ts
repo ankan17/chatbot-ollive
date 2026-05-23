@@ -106,12 +106,13 @@ export async function runChatStream(args: RunChatArgs): Promise<void> {
   let cancelled = false;
 
   // ST4: client closes connection → abort the provider stream
-  req.on('close', () => {
+  const onClose = () => {
     if (!sse.ended) {
       cancelled = true;
       ac.abort();
     }
-  });
+  };
+  req.on('close', onClose);
 
   sse.start({ messageId, requestId });
 
@@ -141,7 +142,11 @@ export async function runChatStream(args: RunChatArgs): Promise<void> {
     // contract §3: done.usage is ALWAYS present — normalize missing to zeroed Usage
     const finalUsage: Usage = usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
-    // Persist BEFORE emitting done so a client acting on done sees consistent DB
+    // Persist BEFORE emitting done so a client acting on done sees consistent DB.
+    // Trade-off: if onComplete (the DB write) throws after all tokens are streamed,
+    // the client receives a complete token stream followed by an SSE error event
+    // (no done), and the message row is finalized as 'error'. This is intentional —
+    // a failed persistence must not signal success to the client.
     await onComplete({ content, usage: finalUsage, finishReason });
     sse.done({ messageId, finishReason, usage: finalUsage });
   } catch (err) {
@@ -164,6 +169,7 @@ export async function runChatStream(args: RunChatArgs): Promise<void> {
       }
     }
   } finally {
+    req.removeListener('close', onClose);
     sse.close();
   }
 }

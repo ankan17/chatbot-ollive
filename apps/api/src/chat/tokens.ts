@@ -2,6 +2,9 @@ import type { ChatRequest } from '@ollive/llm-sdk';
 
 export type ChatMessage = ChatRequest['messages'][number];
 
+// Token headroom reserved for the model's response, subtracted from CONTEXT_TOKEN_BUDGET — A3/BE5
+export const RESPONSE_RESERVE_TOKENS = 1024;
+
 /**
  * Deterministic heuristic: ~4 chars per token (the standard approximation).
  * A 0-length string returns 0.

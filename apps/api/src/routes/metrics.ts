@@ -1,7 +1,8 @@
 import { Router } from 'express';
+import type { NextFunction } from 'express';
+import { ZodError } from 'zod';
 import type { Db } from '@ollive/db';
 import type { AppConfig } from '../config.js';
-import type { Logger } from '../logger.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { AppError } from '../errors.js';
 import { parseMetricQuery } from '../metrics/params.js';
@@ -23,7 +24,13 @@ import type {
 export interface MetricsRouterDeps {
   db: Db;
   config: AppConfig;
-  logger?: Logger;
+}
+
+function handleMetricsError(err: unknown, next: NextFunction): void {
+  if (err instanceof ZodError) {
+    return next(new AppError('validation_error', 'Invalid query parameters', err.issues));
+  }
+  return next(err);
 }
 
 function minutesInRange(from: Date, to: Date): number {
@@ -63,10 +70,7 @@ export function metricsRouter(deps: MetricsRouterDeps): Router {
       };
       return res.json(response);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ZodError') {
-        return next(new AppError('validation_error', 'Invalid query parameters', (err as any).issues));
-      }
-      return next(err);
+      return handleMetricsError(err, next);
     }
   });
 
@@ -87,10 +91,7 @@ export function metricsRouter(deps: MetricsRouterDeps): Router {
       const response: LatencySeries = { bucket: filters.bucket, series };
       return res.json(response);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ZodError') {
-        return next(new AppError('validation_error', 'Invalid query parameters', (err as any).issues));
-      }
-      return next(err);
+      return handleMetricsError(err, next);
     }
   });
 
@@ -108,10 +109,7 @@ export function metricsRouter(deps: MetricsRouterDeps): Router {
       const response: ThroughputSeries = { bucket: filters.bucket, series };
       return res.json(response);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ZodError') {
-        return next(new AppError('validation_error', 'Invalid query parameters', (err as any).issues));
-      }
-      return next(err);
+      return handleMetricsError(err, next);
     }
   });
 
@@ -135,10 +133,7 @@ export function metricsRouter(deps: MetricsRouterDeps): Router {
       const response: ErrorSeries = { bucket: filters.bucket, series };
       return res.json(response);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ZodError') {
-        return next(new AppError('validation_error', 'Invalid query parameters', (err as any).issues));
-      }
-      return next(err);
+      return handleMetricsError(err, next);
     }
   });
 
@@ -158,10 +153,7 @@ export function metricsRouter(deps: MetricsRouterDeps): Router {
       const response: TokenSeries = { bucket: filters.bucket, series };
       return res.json(response);
     } catch (err) {
-      if (err instanceof Error && err.name === 'ZodError') {
-        return next(new AppError('validation_error', 'Invalid query parameters', (err as any).issues));
-      }
-      return next(err);
+      return handleMetricsError(err, next);
     }
   });
 

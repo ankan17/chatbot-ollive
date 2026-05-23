@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm';
 import type { Db } from '@ollive/db';
-import { conversations } from '@ollive/db';
+import { conversations, messages } from '@ollive/db';
 import type { LLMProvider } from '@ollive/llm-sdk';
 
 /** Maximum characters of each turn passed to the title prompt (keeps the prompt small). */
@@ -106,9 +106,6 @@ export function maybeAutoName(
       if (conv.titleSource !== 'default') return; // FR18: never clobber auto/user
 
       // Read the first user + first assistant message (lowest sequence of each role)
-      // We use a direct query on the messages table
-      const { messages } = await import('@ollive/db');
-
       const rows = await db
         .select({ role: messages.role, content: messages.content, sequence: messages.sequence })
         .from(messages)

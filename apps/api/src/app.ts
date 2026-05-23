@@ -89,18 +89,18 @@ export function createApp(deps: AppDeps): express.Express {
   // 10. Chat + Guest SSE endpoints (Plan 5): only mounted when a provider is present
   if (deps.chatProvider) {
     app.use('/v1/conversations', chatRouter({ db, config, chatProvider: deps.chatProvider, logger }));
-    app.use('/v1/guest', guestChatRouter({ redis, config, chatProvider: deps.chatProvider, logger }));
+    app.use('/v1/guest', guestChatRouter({ redis, config, chatProvider: deps.chatProvider }));
   }
 
   // 11. Metrics endpoints (Plan 5): GET /v1/metrics/* — no provider needed
-  app.use('/v1/metrics', metricsRouter({ db, config, logger }));
+  app.use('/v1/metrics', metricsRouter({ db, config }));
 
-  // 13. 404 fallback
+  // 12. 404 fallback
   app.use((_req, _res, next) => {
     next(new AppError('not_found', 'Route not found'));
   });
 
-  // 14. Centralized error handler — MUST be last
+  // 13. Centralized error handler — MUST be last
   app.use(errorHandler(logger));
 
   return app;
