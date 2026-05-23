@@ -10,13 +10,13 @@ import { createConversation } from '../api/conversations.js';
 import { loadGuestState } from '../state/guestMachine.js';
 import type { SseDoneData } from '../api/types.js';
 import MessageList from './MessageList.js';
-import Composer from './Composer.js';
+import Composer, { type ComposerHandle } from './Composer.js';
+import ChatHero from './ChatHero.js';
 import Sidebar from './Sidebar.js';
 import AppShell from './AppShell.js';
 import GuestBanner from './GuestBanner.js';
 import GuestSignInPrompt from './GuestSignInPrompt.js';
 import Spinner from './states/Spinner.js';
-import EmptyState from './states/EmptyState.js';
 import styles from './ChatView.module.css';
 
 // ─── Authed chat with history load ────────────────────────────────────────────
@@ -36,6 +36,7 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
   // Load history when conversationId is set (FE4 — resume)
   const { data: convData, status: convStatus } = useConversation(conversationId);
   const resetDone = useRef(false);
+  const composerRef = useRef<ComposerHandle>(null);
 
   useEffect(() => {
     if (convData && !resetDone.current) {
@@ -83,16 +84,15 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
   return (
     <>
       {state.messages.length === 0 && !isStreaming ? (
-        <div className={styles.emptyCenter}>
-          <EmptyState
-            title="Start a conversation"
-            description="Ask anything — your conversation will be saved automatically."
-          />
-        </div>
+        <ChatHero
+          title="How can I help?"
+          subtitle="Ask anything, or pick up where you left off. Start a conversation below."
+          onPickPrompt={(p) => composerRef.current?.fill(p)}
+        />
       ) : (
         <MessageList messages={state.messages} isStreaming={isStreaming} />
       )}
-      <Composer isStreaming={isStreaming} onSend={handleSend} onStop={stop} />
+      <Composer ref={composerRef} isStreaming={isStreaming} onSend={handleSend} onStop={stop} />
     </>
   );
 }
@@ -106,24 +106,24 @@ interface GuestChatProps {
 function GuestChat({ guestChat }: GuestChatProps) {
   const { state, remaining, limit, isStreaming, isCapped, send, stop } = guestChat;
   const messages = state.conversation.messages;
+  const composerRef = useRef<ComposerHandle>(null);
 
   return (
     <>
       <GuestBanner remaining={remaining} limit={limit} />
       {messages.length === 0 && !isStreaming ? (
-        <div className={styles.emptyCenter}>
-          <EmptyState
-            title="Try Ollive for free"
-            description="Send a message to start your free trial."
-          />
-        </div>
+        <ChatHero
+          title="Try Ollive for free"
+          subtitle="Send a message to start your free trial."
+          onPickPrompt={(p) => composerRef.current?.fill(p)}
+        />
       ) : (
         <MessageList messages={messages} isStreaming={isStreaming} />
       )}
       {isCapped ? (
         <GuestSignInPrompt />
       ) : (
-        <Composer isStreaming={isStreaming} onSend={send} onStop={stop} />
+        <Composer ref={composerRef} isStreaming={isStreaming} onSend={send} onStop={stop} />
       )}
     </>
   );

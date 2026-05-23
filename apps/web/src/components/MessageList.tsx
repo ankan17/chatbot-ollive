@@ -22,7 +22,6 @@ export default function MessageList({ messages, isStreaming }: MessageListProps)
       if (!container) return;
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
-      // Within 50px of bottom => stick; scrolled up => don't
       setStickToBottom(distanceFromBottom < 50);
     }
 
@@ -37,12 +36,34 @@ export default function MessageList({ messages, isStreaming }: MessageListProps)
     }
   }, [messages, isStreaming, stickToBottom]);
 
+  function scrollToLatest() {
+    setStickToBottom(true);
+    sentinelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+
   return (
-    <div ref={containerRef} className={styles.list}>
-      {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
-      ))}
-      <div ref={sentinelRef} className={styles.sentinel} />
+    <div className={styles.wrap}>
+      <div ref={containerRef} className={styles.scroll}>
+        <div className={styles.inner}>
+          {messages.map((msg, i) => (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              isStreaming={isStreaming && i === messages.length - 1}
+            />
+          ))}
+          <div ref={sentinelRef} className={styles.sentinel} />
+        </div>
+      </div>
+
+      {!stickToBottom && (
+        <button type="button" className={styles.toLatest} onClick={scrollToLatest}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 5v14M5 12l7 7 7-7" />
+          </svg>
+          Latest
+        </button>
+      )}
     </div>
   );
 }
