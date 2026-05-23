@@ -4,12 +4,15 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   padding: 3px;
+  width: fit-content;
+  padding: var(--space-1);
 }
 
 .option {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: 75px;
   font-family: var(--font-body);
   font-size: var(--text-xs);
   font-weight: 600;
