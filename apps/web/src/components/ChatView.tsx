@@ -12,6 +12,7 @@ import type { SseDoneData } from '../api/types.js';
 import MessageList from './MessageList.js';
 import Composer from './Composer.js';
 import Sidebar from './Sidebar.js';
+import AppShell from './AppShell.js';
 import GuestBanner from './GuestBanner.js';
 import GuestSignInPrompt from './GuestSignInPrompt.js';
 import Spinner from './states/Spinner.js';
@@ -134,7 +135,7 @@ export default function ChatView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated, status: sessionStatus } = useSession();
+  const { isAuthenticated, status: sessionStatus, user, signOut } = useSession();
 
   const conversations = useConversations();
 
@@ -188,26 +189,28 @@ export default function ChatView() {
   }
 
   return (
-    <div className={styles.chatView}>
-      <Sidebar
-        conversations={conversations.items}
-        activeId={id}
-        statusFilter={conversations.statusFilter}
-        status={conversations.status}
-        onSelect={(convId) => navigate(`/c/${convId}`)}
-        onNew={() => navigate('/')}
-        onToggleFilter={conversations.setStatusFilter}
-        onRename={conversations.rename}
-        onArchive={conversations.archive}
-      />
-      <div className={styles.main}>
-        {authError && (
-          <div className={styles.authError}>
-            Sign-in failed. Please try again.
-          </div>
-        )}
-        <AuthedChat conversationId={id} onFirstDone={handleFirstDone} />
-      </div>
-    </div>
+    <AppShell
+      user={user!}
+      onSignOut={() => void signOut()}
+      sidebar={
+        <Sidebar
+          conversations={conversations.items}
+          activeId={id}
+          statusFilter={conversations.statusFilter}
+          status={conversations.status}
+          onSelect={(convId) => navigate(`/c/${convId}`)}
+          onToggleFilter={conversations.setStatusFilter}
+          onRename={conversations.rename}
+          onArchive={conversations.archive}
+        />
+      }
+    >
+      {authError && (
+        <div className={styles.authError}>
+          Sign-in failed. Please try again.
+        </div>
+      )}
+      <AuthedChat conversationId={id} onFirstDone={handleFirstDone} />
+    </AppShell>
   );
 }

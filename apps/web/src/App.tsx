@@ -4,16 +4,16 @@ import { SessionProvider } from './state/sessionContext.js';
 import { useSession } from './state/sessionContext.js';
 import ChatView from './components/ChatView.js';
 import Dashboards from './components/Dashboards.js';
-import AppShell from './components/AppShell.js';
 import SignInScreen from './components/SignInScreen.js';
 import ErrorBoundary from './components/ErrorBoundary.js';
 import Spinner from './components/states/Spinner.js';
 import { googleSignInUrl } from './api/session.js';
 
 // ─── Route guard: redirects unauthenticated users to /sign-in ─────────────────
+// Pages render their own AppShell, so the guard only gates access.
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { status, isAuthenticated, user, signOut } = useSession();
+  const { status, isAuthenticated, user } = useSession();
 
   if (status === 'loading') {
     return <Spinner />;
@@ -23,11 +23,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     return <Navigate to="/sign-in" replace />;
   }
 
-  return (
-    <AppShell user={user} onSignOut={() => void signOut()}>
-      {children}
-    </AppShell>
-  );
+  return <>{children}</>;
 }
 
 // ─── Root app ─────────────────────────────────────────────────────────────────
@@ -43,7 +39,7 @@ export default function App() {
 }
 
 function AppRoutes() {
-  const { status, isAuthenticated, user, signOut } = useSession();
+  const { status } = useSession();
 
   if (status === 'loading') {
     return <Spinner />;
@@ -51,19 +47,8 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* "/" — guest: bare ChatView; authed: AppShell + ChatView */}
-      <Route
-        path="/"
-        element={
-          isAuthenticated && user ? (
-            <AppShell user={user} onSignOut={() => void signOut()}>
-              <ChatView />
-            </AppShell>
-          ) : (
-            <ChatView />
-          )
-        }
-      />
+      {/* "/" — ChatView renders the full shell when authed, a guest layout otherwise */}
+      <Route path="/" element={<ChatView />} />
 
       {/* "/c/:id" — requires auth */}
       <Route
