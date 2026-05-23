@@ -11,4 +11,12 @@ export default defineWorkspace([
     },
   },
   { test: { name: 'llm-sdk', root: './packages/llm-sdk' } },
+  {
+    test: {
+      name: 'api',
+      root: './apps/api',
+      testTimeout: 30000,
+      fileParallelism: false,
+    },
+  },
 ]);

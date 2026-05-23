@@ -1,0 +1,28 @@
+{
+  "name": "@ollive/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/app.ts" },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx --watch src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ollive/db": "workspace:*",
+    "@ollive/shared": "workspace:*",
+    "@ollive/llm-sdk": "workspace:*",
+    "express": "^4.21.0",
+    "ioredis": "^5.4.0",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.2",
+    "tsx": "^4.19.0"
+  }
+}
