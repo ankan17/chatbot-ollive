@@ -16,3 +16,7 @@ export { PatternRedactor, NoopRedactor, LlmRedactor, createRedactor } from './re
 export { GoogleProvider, googleProviderFactory } from './providers/google.js';
 export { ProviderRegistry } from './registry.js';
 export type { ProviderFactory } from './registry.js';
+
+// Task 4: withLogging decorator + LogSink seam
+export { withLogging } from './logging/logger.js';
+export type { LogSink } from './logging/logger.js';
