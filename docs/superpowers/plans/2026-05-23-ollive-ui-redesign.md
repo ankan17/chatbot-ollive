@@ -1,8 +1,8 @@
-# Ollive UI Redesign (Dark Premium) — Implementation Plan
+# Ollive UI Redesign (ollive.ai Brand) — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign the entire `apps/web` SPA to a dark-premium aesthetic (deep indigo-slate, electric-indigo accent, glass surfaces, atmosphere + motion) with a persisted dark/light theme switcher and a genuinely-wired, provider-agnostic model switcher.
+**Goal:** Redesign the entire `apps/web` SPA to match the **ollive.ai brand system** (green-black canvas `#0a0c0a`, warm-cream text `#f5f5f0`, lime-green accent `#98f46f`, Young Serif + Space Grotesk, full-pill controls, glass surfaces, atmosphere + motion) with a persisted dark/light theme switcher and a genuinely-wired, provider-agnostic model switcher.
 
 **Architecture:** All design tokens live in `global.css` as `:root` (dark default) + `[data-theme="light"]` overrides, reusing the existing `--color-*`/`--space-*`/`--radius-*` names so most components re-theme by value alone; structural work is concentrated in shell/sidebar, chat surface, sign-in, and dashboards. Theme state is a small React context applied via `data-theme` on `<html>`, pre-painted in `index.html`. The model switcher is fed by a new `GET /v1/models` endpoint that exposes only the catalogs of configured providers (Gemini today); conversation create/patch accept a validated `model`.
 
@@ -24,7 +24,7 @@
 
 ## Phase 1 — Design foundation (tokens + theme system)
 
-### Task 1: Dark-premium token system in `global.css`
+### Task 1: ollive.ai brand token system in `global.css`
 
 **Files:**
 - Modify: `apps/web/src/styles/global.css`
@@ -34,38 +34,38 @@
 - [ ] **Step 2 — Write tokens.** In `global.css`, define `:root` (dark, default) and `[data-theme="light"]` blocks. Reuse existing names so components re-theme automatically; add new tokens for atmosphere/glow. Concrete starting values (tune for WCAG AA during QA):
 
   Shared (both themes):
-  - `--font-display:'Fraunces',Georgia,serif; --font-body:'Hanken Grotesk',system-ui,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;`
-  - `--accent-2:#c4b5fd; --accent-2-rgb:196 181 253;`
-  - radii: `--radius-sm:8px; --radius-md:12px; --radius-lg:18px; --radius-xl:26px; --radius-full:999px;`
+  - `--font-display:'Young Serif',Georgia,serif; --font-body:'Space Grotesk',system-ui,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;`
+  - `--color-accent:#98f46f; --accent-deep:#7fe052; --accent-rgb:152 244 111;` (lime — a fill, not text; same hue both themes)
+  - radii: `--radius-sm:8px; --radius-md:12px; --radius-lg:16px; --radius-xl:22px; --radius-full:999px;` (buttons/controls use `--radius-full`)
   - keep the `--space-*` and `--text-*` scales as-is.
 
-  Dark (`:root`):
-  - `--color-bg-base:#0a0c14; --color-bg-surface:#11141f; --color-bg-elevated:#181c2b;`
-  - `--color-border:rgb(255 255 255/0.09); --border-strong:rgb(255 255 255/0.16);`
-  - `--color-text-primary:#edf0f6; --color-text-secondary:#b6bccb; --color-text-muted:#8b91a6; --color-text-on-accent:#0a0c14;`
-  - `--color-accent:#818cf8; --color-accent-hover:#6f7bf0; --color-accent-light:rgb(129 140 248/0.14); --accent-rgb:129 140 248;`
-  - `--color-error:#f4717a; --color-error-light:rgb(244 113 122/0.14); --color-success:#4ade80; --color-warning:#fbbf24;`
-  - `--shadow-sm:0 1px 2px rgb(0 0 0/0.4); --shadow-md:0 10px 30px -12px rgb(0 0 0/0.6),0 2px 6px -2px rgb(0 0 0/0.4); --shadow-lg:0 30px 70px -25px rgb(0 0 0/0.7);`
+  Dark (`:root`, primary — brand-accurate):
+  - `--color-bg-base:#0a0c0a; --color-bg-surface:rgb(245 245 240/0.05); --color-bg-elevated:rgb(245 245 240/0.07);`
+  - `--color-border:rgb(245 245 240/0.10); --border-strong:rgb(245 245 240/0.18);`
+  - `--color-text-primary:#f5f5f0; --color-text-secondary:rgb(245 245 240/0.78); --color-text-muted:rgb(245 245 240/0.62); --color-text-subtle:rgb(245 245 240/0.32); --color-text-on-accent:#0a0c0a;`
+  - `--color-accent-hover:var(--accent-deep); --color-accent-light:rgb(152 244 111/0.12);`
+  - `--color-error:#f4717a; --color-error-light:rgb(244 113 122/0.14); --color-success:#98f46f; --color-warning:#f4b14f;`
+  - `--shadow-sm:0 1px 2px rgb(0 0 0/0.4); --shadow-md:0 10px 30px -12px rgb(0 0 0/0.6),0 2px 6px -2px rgb(0 0 0/0.4); --shadow-lg:0 28px 60px -28px rgb(0 0 0/0.75);`
   - `--grain-opacity:0.5; --grain-blend:overlay;`
 
-  Light (`[data-theme="light"]`):
-  - `--color-bg-base:#f3f4f8; --color-bg-surface:#ffffff; --color-bg-elevated:#ffffff;`
-  - `--color-border:rgb(18 22 40/0.09); --border-strong:rgb(18 22 40/0.16);`
-  - `--color-text-primary:#14172a; --color-text-secondary:#424a63; --color-text-muted:#6b7186; --color-text-on-accent:#ffffff;`
-  - `--color-accent:#5b63e8; --color-accent-hover:#4f46e5; --color-accent-light:rgb(91 99 232/0.10); --accent-rgb:91 99 232;`
-  - `--color-error:#dc2626; --color-error-light:#fef2f2; --color-success:#16a34a; --color-warning:#d97706;`
-  - `--shadow-lg:0 30px 60px -28px rgb(30 40 80/0.35);` (+ softer sm/md) `--grain-opacity:0.4; --grain-blend:multiply;`
-- [ ] **Step 3 — Global atmosphere & base.** Set `color-scheme` per theme; `body { font-family:var(--font-body); background:var(--color-bg-base); color:var(--color-text-primary); }`; add fixed `body::before` layered radial glows using `rgb(var(--accent-rgb)/…)` + `rgb(var(--accent-2-rgb)/…)`, and `body::after` SVG `feTurbulence` grain at `var(--grain-opacity)`/`var(--grain-blend)` (mirror the technique in the mockup `.superpowers/brainstorm/56628-1779555486/content/dark-premium.html`). Add `h1–h4{font-family:var(--font-display)}`, themed `::selection`, `:focus-visible` accent ring, themed thin scrollbars, and a `@media (prefers-reduced-motion: reduce)` block disabling transforms/animation.
+  Light (`[data-theme="light"]`, inverted cream — ollive.ai light sections):
+  - `--color-bg-base:#f5f5f0; --color-bg-surface:rgb(30 47 28/0.05); --color-bg-elevated:#ffffff;`
+  - `--color-border:rgb(30 47 28/0.12); --border-strong:rgb(30 47 28/0.20);`
+  - `--color-text-primary:#14201a; --color-text-secondary:rgb(30 47 28/0.78); --color-text-muted:rgb(30 47 28/0.62); --color-text-subtle:rgb(30 47 28/0.40); --color-text-on-accent:#14201a;`
+  - `--color-accent-hover:#6fd047; --color-accent-light:rgb(152 244 111/0.18); --accent-deep:#4e9b2f;` (deeper lime for accent-as-text/icon to meet AA on cream)
+  - `--color-error:#dc2626; --color-error-light:#fef2f2; --color-success:#4e9b2f; --color-warning:#b4791a;`
+  - `--shadow-lg:0 28px 50px -30px rgb(30 47 28/0.35);` (+ softer sm/md) `--grain-opacity:0.35; --grain-blend:multiply;`
+- [ ] **Step 3 — Global atmosphere & base.** Set `color-scheme` per theme; `body { font-family:var(--font-body); background:var(--color-bg-base); color:var(--color-text-primary); }`; add fixed `body::before` layered radial glows using `rgb(var(--accent-rgb)/…)`, and `body::after` SVG `feTurbulence` grain at `var(--grain-opacity)`/`var(--grain-blend)` (mirror the technique in the mockup `.superpowers/brainstorm/56628-1779555486/content/chat-ollive-brand.html`). Add `h1–h4{font-family:var(--font-display)}`, themed `::selection`, `:focus-visible` accent ring, themed thin scrollbars, and a `@media (prefers-reduced-motion: reduce)` block disabling transforms/animation.
 - [ ] **Step 4 — Verify.** `pnpm --filter @ollive/web typecheck` passes; `pnpm --filter @ollive/web test` stays green; dev server renders with dark tokens (app still functionally intact, if unstyled in spots). Toggle `<html data-theme="light">` in devtools to sanity-check light values resolve.
-- [ ] **Step 5 — Commit.** `style(web): dark-premium design tokens + light theme in global.css; remove dead tokens.module.css`
+- [ ] **Step 5 — Commit.** `style(web): ollive.ai brand design tokens + light theme in global.css; remove dead tokens.module.css`
 
-**Pattern:** the mockup file for atmosphere/grain/glow values; the old `tokens.module.css` for the canonical token-name list.
+**Pattern:** the mockups (`chat-ollive-brand.html`, `dashboard.html`) for atmosphere/grain/glow + brand values; the old `tokens.module.css` for the canonical token-name list.
 
 ### Task 2: Pre-paint theme + fonts in `index.html`
 
 **Files:** Modify `apps/web/index.html`
 
-- [ ] **Step 1 — Fonts.** Add the Google Fonts `<link>` for `Fraunces` (500;600;700, opsz), `Hanken Grotesk` (400;500;600;700), `JetBrains Mono` (400;500) with `preconnect` (copy from the mockup `<head>`).
+- [ ] **Step 1 — Fonts.** Add the Google Fonts `<link>` for `Young+Serif`, `Space+Grotesk:wght@300;400;500;600;700`, and `JetBrains+Mono:wght@400;500` with `preconnect` (copy from the mockup `<head>`).
 - [ ] **Step 2 — Pre-paint script.** Add a tiny blocking inline `<script>` in `<head>` that reads `localStorage.getItem('ollive-theme')`, falls back to `matchMedia('(prefers-color-scheme: dark)')`, else `'dark'`, and sets `document.documentElement.dataset.theme` before first paint (avoids flash). Set `<html data-theme="dark">` as the static default attribute too.
 - [ ] **Step 3 — Verify.** Reload dev server: no theme flash; `localStorage.ollive-theme='light'` then reload → starts light.
 - [ ] **Step 4 — Commit.** `feat(web): preload brand fonts and pre-paint theme attribute`
@@ -117,7 +117,7 @@ function useTheme(): { theme: Theme; setTheme(t: Theme): void; toggleTheme(): vo
 
 **Files:** Modify `apps/web/src/components/Sidebar.tsx` + `Sidebar.module.css`. Place `<ThemeToggle/>` in the footer.
 
-- [ ] **Step 1 — Restyle.** Sections top→bottom (mirror mockup `.sidebar`): brand row (olive-sprig SVG mark + "Ollive" in Fraunces); accent-tinted **New chat** button (existing new-conversation action); nav (Chat → `/`, Metrics → `/dashboards`) with line-icon + active state; conversation history (existing `useConversations` data) grouped by recency with `ConversationListItem`; spacer; `<ThemeToggle/>`; user chip (gradient-initials avatar, name, plan) opening the existing sign-out menu.
+- [ ] **Step 1 — Restyle.** Sections top→bottom (mirror mockup `.sidebar`): brand row (circular Ollive SVG mark + "Ollive" in Young Serif); pill **New chat** button (existing new-conversation action); nav (Chat → `/`, Metrics → `/dashboards`) with line-icon + active state; conversation history (existing `useConversations` data) grouped by recency with `ConversationListItem`; spacer; `<ThemeToggle/>`; user chip (gradient-initials avatar, name, plan) opening the existing sign-out menu.
 - [ ] **Step 2 — Preserve behavior.** Keep all existing handlers/data hooks; only markup/classes + the ThemeToggle addition change. If Sidebar currently lacks history grouping, add a pure helper `groupConversationsByRecency(items)` (Today/Yesterday/Earlier) — unit-test it if added.
 - [ ] **Step 3 — Verify.** Existing tests green; nav + new-chat + sign-out still work in manual QA, both themes.
 - [ ] **Step 4 — Commit.** `feat(web): redesign sidebar (brand, nav, history, theme toggle, user chip)`
@@ -150,7 +150,7 @@ function useTheme(): { theme: Theme; setTheme(t: Theme): void; toggleTheme(): vo
 
 - [ ] **Step 1 — Test.** When the conversation is empty, the hero renders the wordmark, tagline, and N prompt chips; clicking a chip calls `onPick` with that prompt text (and ChatView routes it into the composer input + focuses). Add `suggestedPrompts.test.tsx` for the chip→callback contract.
 - [ ] **Step 2 — Run, expect fail.**
-- [ ] **Step 3 — Implement.** Replace the tiny empty-state with the mockup hero (`.heromark` sprig + glow, Fraunces gradient wordmark, tagline, `.chips` row with line-icons, staggered `rise` animation). Wire chip click to set composer draft + focus. Guest variant copy ("Try Ollive free — sign in to save your chats").
+- [ ] **Step 3 — Implement.** Replace the tiny empty-state with the mockup hero (`.heromark` circular mark + glow, Young Serif headline "How can I help?", muted sub-line, `.chips` row with line-icons, staggered `rise` animation). Wire chip click to set composer draft + focus. Guest variant copy ("Try Ollive free — sign in to save your chats").
 - [ ] **Step 4 — Run, expect pass;** suite green.
 - [ ] **Step 5 — Commit.** `feat(web): chat homepage hero with suggested prompts`
 
@@ -176,7 +176,7 @@ function useTheme(): { theme: Theme; setTheme(t: Theme): void; toggleTheme(): vo
 
 **Files:** Modify `MessageBubble.tsx` + `MessageBubble.module.css`.
 
-- [ ] **Step 1 — Restyle (preserve markdown/props).** User = accent-tinted glass (`--color-accent-light` fill + accent-ish border, right-aligned, tucked corner). Assistant = editorial block on `--color-bg-surface` with a small sprig glyph gutter, full markdown; `pre`/`code` on `--color-bg-elevated` + JetBrains Mono; inline code tinted; add a hover **copy** button on code blocks. Streaming `status==='partial'` shows a pulsing accent caret. Error status uses `--color-error`/`--color-error-light` with a retry affordance. Status/meta (relative time, token tags) muted-mono, revealed on hover.
+- [ ] **Step 1 — Restyle (preserve markdown/props).** User = accent-tinted glass (`--color-accent-light` fill + accent-ish border, right-aligned, tucked corner). Assistant = editorial block on `--color-bg-surface` with a small Ollive-mark glyph gutter, full markdown; `pre`/`code` on `--color-bg-elevated` + JetBrains Mono; inline code tinted; add a hover **copy** button on code blocks. Streaming `status==='partial'` shows a pulsing accent caret. Error status uses `--color-error`/`--color-error-light` with a retry affordance. Status/meta (relative time, token tags) muted-mono, revealed on hover.
 - [ ] **Step 2 — Verify.** `messageBubble.test.tsx` stays green (markdown rendering + role/status branching unchanged); QA both themes incl. code block + copy.
 - [ ] **Step 3 — Commit.** `feat(web): redesign message bubbles (glass user, editorial assistant, code copy)`
 
@@ -277,7 +277,7 @@ function ModelSwitcher(props: { value: string; onChange(modelId: string): void; 
 
 **Files:** Modify `SignInScreen.tsx` + `SignInScreen.module.css`; Test `smoke.test.tsx` stays green.
 
-- [ ] **Step 1 — Restyle.** Centered glass card on the atmospheric canvas: glowing sprig mark, Fraunces "Ollive", tagline, one-line value prop, **Google** button with the multicolor Google "G" SVG glyph + hover/affordance, faint footer, entrance animation. Keep the existing `onSignIn` handler/prop.
+- [ ] **Step 1 — Restyle.** Centered glass card on the atmospheric canvas: glowing circular Ollive mark, Young Serif "Ollive", tagline, one-line value prop, **Google** button (pill) with the multicolor Google "G" SVG glyph + hover/affordance, faint footer, entrance animation. Keep the existing `onSignIn` handler/prop.
 - [ ] **Step 2 — Verify.** Tests green; QA both themes; button triggers `onSignIn`.
 - [ ] **Step 3 — Commit.** `feat(web): redesign sign-in screen`
 
@@ -310,7 +310,7 @@ function ModelSwitcher(props: { value: string; onChange(modelId: string): void; 
 
 **Files:** Modify `SummaryCards.tsx` + `SummaryCards.module.css`.
 
-- [ ] **Step 1 — Restyle.** Glass cards, large Fraunces numerals, mono labels, subtle trend hint. Preserve props/data.
+- [ ] **Step 1 — Restyle.** Glass cards, large Young Serif numerals, mono labels, subtle trend hint. Preserve props/data.
 - [ ] **Step 2 — Verify + Commit.** `style(web): redesign metric summary cards`.
 
 ### Task 25: Metric filters redesign
@@ -326,7 +326,7 @@ function ModelSwitcher(props: { value: string; onChange(modelId: string): void; 
 
 **Interface:** `function getChartTheme(theme: 'dark'|'light'): { axis:string; grid:string; series:string[]; tooltipBg:string; tooltipBorder:string; areaGradientId:string };`
 
-- [ ] **Step 1 — Implement** the theme helper (indigo accent + a small harmonized palette: `#818cf8`, `#c4b5fd`, plus theme-tuned secondaries) and apply to each chart's axes/grid/series/tooltip/area-gradient. Read current theme via `useTheme`.
+- [ ] **Step 1 — Implement** the theme helper (lime accent + a small harmonized palette: `#98f46f`, a soft teal/green `#5ed6a8`, and a warm `#f4b14f` / error-red `#f4717a` for the error series) and apply to each chart's axes/grid/series/tooltip/area-gradient. Read current theme via `useTheme`.
 - [ ] **Step 2 — Verify.** `chartData.test.ts` + suite green; charts legible and on-brand in **both** themes in QA.
 - [ ] **Step 3 — Commit.** `feat(web): theme recharts for dark/light`
 
@@ -346,7 +346,7 @@ function ModelSwitcher(props: { value: string; onChange(modelId: string): void; 
 - [ ] **Step 1 — Run everything.** `pnpm test` (whole workspace) and `pnpm --filter @ollive/web typecheck` + `pnpm --filter @ollive/api typecheck` — all green.
 - [ ] **Step 2 — Visual QA** every screen in **both themes** at the dev server: homepage (auth + guest), conversation w/ streaming + code + error, sidebar/drawer at mobile width, model switcher, sign-in, dashboards. Check WCAG AA contrast on muted/subtle text; verify `prefers-reduced-motion`.
 - [ ] **Step 3 — Fix** any contrast/spacing/responsive issues found (small commits).
-- [ ] **Step 4 — Final commit.** `chore(web): dark-premium redesign QA polish`
+- [ ] **Step 4 — Final commit.** `chore(web): ollive.ai-brand redesign QA polish`
 
 ---
 
