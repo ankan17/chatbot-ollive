@@ -49,11 +49,23 @@ export interface SseErrorData {
   message: string;
 }
 
+/**
+ * `title` — optional, emitted AFTER `done` (before the stream closes) on the
+ * first response of an authed conversation, once the auto-generated title has
+ * been persisted. `done` remains the success terminal for the message; this is
+ * an additive trailing event that older clients safely ignore.
+ */
+export interface SseTitleData {
+  conversationId: string;
+  title: string;
+}
+
 export type SseEvent =
   | { event: 'start'; data: SseStartData }
   | { event: 'token'; data: SseTokenData }
   | { event: 'done'; data: SseDoneData }
-  | { event: 'error'; data: SseErrorData };
+  | { event: 'error'; data: SseErrorData }
+  | { event: 'title'; data: SseTitleData };
 
 // Re-export for convenience
 export { usageSchema };

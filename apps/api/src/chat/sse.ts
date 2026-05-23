@@ -4,6 +4,7 @@ import type {
   SseTokenData,
   SseDoneData,
   SseErrorData,
+  SseTitleData,
 } from '@ollive/shared/api';
 
 export interface SseStream {
@@ -12,6 +13,8 @@ export interface SseStream {
   /** usage is required by the type — never call with a null usage */
   done: (data: SseDoneData) => void;
   error: (data: SseErrorData) => void;
+  /** Optional trailing event after done — carries the auto-generated title. */
+  title: (data: SseTitleData) => void;
   /** Ends the response + clears the heartbeat timer. Idempotent. */
   close: () => void;
   readonly ended: boolean;
@@ -74,6 +77,9 @@ export function openSse(res: Response, opts?: { heartbeatMs?: number }): SseStre
     },
     error(data: SseErrorData): void {
       write('error', data);
+    },
+    title(data: SseTitleData): void {
+      write('title', data);
     },
     close(): void {
       if (_ended) return;

@@ -129,7 +129,11 @@ describe('POST /v1/conversations/:id/messages — happy path', () => {
     const events = parseSseEvents(res.text);
     const eventNames = events.map((e) => e.event);
     expect(eventNames[0]).toBe('start');
-    expect(eventNames[eventNames.length - 1]).toBe('done');
+    // `done` terminates the message stream; on a first response a `title` event
+    // may trail it (auto-naming). Nothing other than `title` follows `done`.
+    const doneIdx = eventNames.indexOf('done');
+    expect(doneIdx).toBeGreaterThan(-1);
+    expect(eventNames.slice(doneIdx + 1).every((n) => n === 'title')).toBe(true);
     expect(eventNames.some((n) => n === 'token')).toBe(true);
 
     // start event

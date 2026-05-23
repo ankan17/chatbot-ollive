@@ -12,7 +12,7 @@ import { AppError } from '../errors.js';
 import { chatMessageSchema } from '@ollive/shared/api';
 import { buildContext, estimateTokens, RESPONSE_RESERVE_TOKENS } from '../chat/tokens.js';
 import { runChatStream } from '../chat/run-chat.js';
-import { maybeAutoName } from '../chat/naming.js';
+import { generateAndPersistTitle } from '../chat/naming.js';
 
 export interface ChatRouterDeps {
   db: Db;
@@ -130,9 +130,16 @@ export function chatRouter(deps: ChatRouterDeps): Router {
             .update(conversations)
             .set({ updatedAt: new Date() })
             .where(eq(conversations.id, conv.id));
-          if (isFirstResponse) {
-            maybeAutoName({ db, provider: deps.chatProvider, model: conv.model, logger: deps.logger }, conv.id);
-          }
+        },
+        async onAfterDone({ title: emitTitle }) {
+          // On the first response, generate + persist the title AFTER done (so the
+          // client already re-enabled the composer), then push it over the stream.
+          if (!isFirstResponse) return;
+          const title = await generateAndPersistTitle(
+            { db, provider: deps.chatProvider, model: conv.model, logger: deps.logger },
+            conv.id,
+          );
+          if (title) emitTitle({ conversationId: conv.id, title });
         },
         async onCancel({ content }) {
           await db

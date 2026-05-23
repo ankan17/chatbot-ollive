@@ -70,62 +70,78 @@ export async function generateTitle(
   return cleanTitle(raw);
 }
 
+interface AutoNameDeps {
+  db: Db;
+  provider: LLMProvider;
+  model: string;
+  logger?: { warn: (...args: unknown[]) => void };
+}
+
 /**
- * Fire-and-forget auto-naming side-effect.
+ * Generate a ≤6-word title from the conversation's first exchange and persist it.
  *
- * If the conversation's `title_source` is `'default'`, asynchronously calls the provider
- * to generate a ≤6-word title and updates the row (guarded `WHERE title_source='default'`
- * for race-safety against concurrent user renames).
+ * If the conversation's `title_source` is `'default'`, calls the provider to
+ * generate a title and updates the row (guarded `WHERE title_source='default'`
+ * for race-safety against concurrent user renames — FR18).
  *
- * Failures swallow and log — the default title is left intact (FR17).
- * Returns void immediately; work runs on a detached promise.
+ * Returns the persisted title, or `null` if naming was skipped (conversation not
+ * found, already named, or a concurrent rename won the guard) or failed. Failures
+ * swallow and log — the default title is left intact (FR17).
  *
- * NEVER awaited on the hot path (BE12/§7.2 step 6).
+ * Awaitable: callers that need the title (e.g. to push it over SSE) await this.
+ * NEVER await on the hot path *before* `done` — see `maybeAutoName`.
  */
-export function maybeAutoName(
-  deps: {
-    db: Db;
-    provider: LLMProvider;
-    model: string;
-    logger?: { warn: (...args: unknown[]) => void };
-  },
+export async function generateAndPersistTitle(
+  deps: AutoNameDeps,
   conversationId: string,
-): void {
+): Promise<string | null> {
   const { db, provider, model, logger } = deps;
 
-  // Fire-and-forget: detached promise
-  void (async () => {
-    try {
-      // Re-read the conversation row
-      const [conv] = await db
-        .select()
-        .from(conversations)
-        .where(eq(conversations.id, conversationId));
+  try {
+    // Re-read the conversation row
+    const [conv] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
 
-      if (!conv) return; // Conversation not found — nothing to do
-      if (conv.titleSource !== 'default') return; // FR18: never clobber auto/user
+    if (!conv) return null; // Conversation not found — nothing to do
+    if (conv.titleSource !== 'default') return null; // FR18: never clobber auto/user
 
-      // Read the first user + first assistant message (lowest sequence of each role)
-      const rows = await db
-        .select({ role: messages.role, content: messages.content, sequence: messages.sequence })
-        .from(messages)
-        .where(eq(messages.conversationId, conversationId));
+    // Read the first user + first assistant message (lowest sequence of each role)
+    const rows = await db
+      .select({ role: messages.role, content: messages.content, sequence: messages.sequence })
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId));
 
-      const userMsgs = rows.filter((r) => r.role === 'user').sort((a, b) => a.sequence - b.sequence);
-      const asstMsgs = rows.filter((r) => r.role === 'assistant').sort((a, b) => a.sequence - b.sequence);
+    const userMsgs = rows.filter((r) => r.role === 'user').sort((a, b) => a.sequence - b.sequence);
+    const asstMsgs = rows.filter((r) => r.role === 'assistant').sort((a, b) => a.sequence - b.sequence);
 
-      const firstUserText = userMsgs[0]?.content ?? '';
-      const firstAssistantText = asstMsgs[0]?.content ?? '';
+    const firstUserText = userMsgs[0]?.content ?? '';
+    const firstAssistantText = asstMsgs[0]?.content ?? '';
 
-      const title = await generateTitle(provider, model, firstUserText, firstAssistantText);
+    const title = await generateTitle(provider, model, firstUserText, firstAssistantText);
 
-      // Guarded UPDATE: only sets title when title_source is still 'default' (race-safe)
-      await db
-        .update(conversations)
-        .set({ title, titleSource: 'auto', updatedAt: new Date() })
-        .where(and(eq(conversations.id, conversationId), eq(conversations.titleSource, 'default')));
-    } catch (err) {
-      logger?.warn({ err }, 'auto-naming failed — leaving default title intact');
-    }
-  })();
+    // Guarded UPDATE: only sets title when title_source is still 'default' (race-safe)
+    const updated = await db
+      .update(conversations)
+      .set({ title, titleSource: 'auto', updatedAt: new Date() })
+      .where(and(eq(conversations.id, conversationId), eq(conversations.titleSource, 'default')))
+      .returning({ id: conversations.id });
+
+    // Guard matched no row → a concurrent rename won; don't claim the auto title.
+    if (updated.length === 0) return null;
+
+    return title;
+  } catch (err) {
+    logger?.warn({ err }, 'auto-naming failed — leaving default title intact');
+    return null;
+  }
+}
+
+/**
+ * Fire-and-forget auto-naming side-effect. Returns void immediately; work runs
+ * on a detached promise. Use when the caller does not need the resulting title.
+ */
+export function maybeAutoName(deps: AutoNameDeps, conversationId: string): void {
+  void generateAndPersistTitle(deps, conversationId);
 }

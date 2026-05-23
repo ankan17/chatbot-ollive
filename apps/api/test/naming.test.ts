@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { runMigrations, createDb, users as usersTable, conversations as conversationsTable, messages as messagesTable } from '@ollive/db';
 import { loadConfig } from '../src/config.js';
-import { cleanTitle, maybeAutoName } from '../src/chat/naming.js';
+import { cleanTitle, maybeAutoName, generateAndPersistTitle } from '../src/chat/naming.js';
 import { FakeChatProvider } from './fakes.js';
 
 // ---- Unit tests for cleanTitle ----
@@ -253,5 +253,68 @@ describe('maybeAutoName integration', () => {
     expect(row.title).toBe('New conversation');
     // Logger should have been called with a warning
     expect(warnCalls.length).toBeGreaterThan(0);
+  });
+});
+
+// The SSE `title` push relies on the awaitable form returning the persisted title.
+describe('generateAndPersistTitle return value', () => {
+  it('returns the persisted title when naming succeeds', async () => {
+    const { conversationId } = await seedConversation({
+      firstUserContent: 'What is the capital of France?',
+      firstAsstContent: 'The capital of France is Paris.',
+    });
+    const provider = new FakeChatProvider({
+      deltas: ['Capital', ' of', ' France'],
+      finishReason: 'stop',
+    });
+
+    const title = await generateAndPersistTitle(
+      { db, provider, model: 'gemini-2.5-flash' },
+      conversationId,
+    );
+
+    expect(title).toBe('Capital of France');
+    const [row] = await db
+      .select({ title: conversationsTable.title, titleSource: conversationsTable.titleSource })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, conversationId));
+    expect(row.titleSource).toBe('auto');
+    expect(row.title).toBe('Capital of France');
+  });
+
+  it('returns null without clobbering when the title is already user-set', async () => {
+    const { conversationId } = await seedConversation({
+      titleSource: 'user',
+      title: 'My Custom Title',
+      firstUserContent: 'Hello',
+      firstAsstContent: 'Hi',
+    });
+    const provider = new FakeChatProvider({ deltas: ['Something else'], finishReason: 'stop' });
+
+    const title = await generateAndPersistTitle(
+      { db, provider, model: 'gemini-2.5-flash' },
+      conversationId,
+    );
+
+    expect(title).toBeNull();
+  });
+
+  it('returns null when the provider fails (default title preserved)', async () => {
+    const { conversationId } = await seedConversation({
+      firstUserContent: 'Tell me a joke',
+      firstAsstContent: 'Why did the chicken cross the road?',
+    });
+    const throwingProvider = new FakeChatProvider({
+      deltas: [],
+      throwAfter: 0,
+      throwError: new Error('provider_error: generation failed'),
+    });
+
+    const title = await generateAndPersistTitle(
+      { db, provider: throwingProvider, model: 'gemini-2.5-flash' },
+      conversationId,
+    );
+
+    expect(title).toBeNull();
   });
 });

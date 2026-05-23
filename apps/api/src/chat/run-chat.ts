@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import type { LLMProvider, ChatRequest, CallContext } from '@ollive/llm-sdk';
 import type { Usage } from '@ollive/shared';
-import type { SseErrorCode } from '@ollive/shared/api';
+import type { SseErrorCode, SseTitleData } from '@ollive/shared/api';
 import { openSse } from './sse.js';
 
 export interface RunChatArgs {
@@ -22,6 +22,13 @@ export interface RunChatArgs {
   onComplete: (result: { content: string; usage: Usage; finishReason: string }) => Promise<void>;
   onCancel: (result: { content: string }) => Promise<void>;
   onError: (result: { content: string; code: SseErrorCode; message: string }) => Promise<void>;
+  /**
+   * Optional hook run AFTER a successful `done` (never on cancel/error), while the
+   * SSE stream is still open — used to push trailing events such as the auto title.
+   * Errors are swallowed so a trailing-event failure never prevents the stream from
+   * closing. The provided `emit.title` is a no-op if the client has disconnected.
+   */
+  onAfterDone?: (emit: { title: (data: SseTitleData) => void }) => Promise<void>;
 }
 
 /**
@@ -99,6 +106,7 @@ export async function runChatStream(args: RunChatArgs): Promise<void> {
     onComplete,
     onCancel,
     onError,
+    onAfterDone,
   } = args;
 
   const sse = openSse(res);
@@ -149,6 +157,17 @@ export async function runChatStream(args: RunChatArgs): Promise<void> {
     // a failed persistence must not signal success to the client.
     await onComplete({ content, usage: finalUsage, finishReason });
     sse.done({ messageId, finishReason, usage: finalUsage });
+
+    // Trailing events (e.g. auto title) — after done, before close. Best-effort:
+    // a failure here must not turn a successful response into an error, and the
+    // emit is skipped if the client has since disconnected.
+    if (onAfterDone) {
+      try {
+        await onAfterDone({ title: (data) => { if (!cancelled) sse.title(data); } });
+      } catch {
+        // swallow — the message already succeeded; stream must still close cleanly
+      }
+    }
   } catch (err) {
     // CANCEL: contract §3 / RESOLUTION 4 — stream simply closes, NO done/error event
     if (cancelled || (err instanceof Error && err.name === 'AbortError') || ac.signal.aborted) {
