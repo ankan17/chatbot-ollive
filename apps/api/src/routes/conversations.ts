@@ -3,6 +3,7 @@ import type { AppConfig } from '../config.js';
 import type { ConversationRepository } from '../conversations/repository.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { AppError } from '../errors.js';
+import { availableModelIds } from '../models/catalog.js';
 import {
   listConversationsQuerySchema,
   createConversationSchema,
@@ -68,14 +69,17 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
       if (!parseResult.success) {
         return next(new AppError('validation_error', 'Invalid body', parseResult.error.issues));
       }
-      const { title } = parseResult.data;
+      const { title, model } = parseResult.data;
+      if (model && !availableModelIds(config).has(model)) {
+        return next(new AppError('validation_error', `Unknown model: ${model}`));
+      }
       const userId = req.user!.id;
 
       const conv = await conversations.create({
         userId,
         title,
         provider: 'google',
-        model: config.defaultModel,
+        model: model ?? config.defaultModel,
       });
 
       return res.status(201).json(conv);
@@ -107,11 +111,14 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
       if (!parseResult.success) {
         return next(new AppError('validation_error', 'Invalid body', parseResult.error.issues));
       }
-      const { title, status } = parseResult.data;
+      const { title, status, model } = parseResult.data;
+      if (model && !availableModelIds(config).has(model)) {
+        return next(new AppError('validation_error', `Unknown model: ${model}`));
+      }
       const userId = req.user!.id;
       const { id } = req.params;
 
-      const conv = await conversations.patch(userId, id!, { title, status });
+      const conv = await conversations.patch(userId, id!, { title, status, model });
       if (!conv) {
         return next(new AppError('not_found', 'Conversation not found'));
       }

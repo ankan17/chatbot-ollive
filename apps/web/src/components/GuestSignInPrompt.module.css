@@ -1,17 +1,23 @@
 .prompt {
-  padding: var(--space-4);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
+  margin: var(--space-4) auto var(--space-6);
+  max-width: 540px;
+  width: calc(100% - var(--space-8));
+  padding: var(--space-6);
+  border: 1px solid var(--border-strong);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
   text-align: center;
 }
 
 .message {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
 .button {
@@ -19,13 +25,16 @@
   background: var(--color-accent);
   color: var(--color-text-on-accent);
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
   font-size: var(--text-base);
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  box-shadow: 0 6px 18px -5px rgb(var(--accent-rgb) / 0.5);
+  transition: background 0.16s ease, transform 0.16s ease;
 }
 
 .button:hover {
   background: var(--color-accent-hover);
+  transform: translateY(-1px);
 }

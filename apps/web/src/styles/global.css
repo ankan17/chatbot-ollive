@@ -1,3 +1,129 @@
+/* ============================================================
+   Ollive — design system (follows the ollive.ai brand)
+   Dark-first editorial: green-black canvas, warm-cream ink,
+   lime-green accent, Young Serif display + Space Grotesk body.
+   Tokens consumed by every component CSS Module via var().
+   ============================================================ */
+
+:root {
+  /* ── Typography ── */
+  --font-display: 'Young Serif', Georgia, 'Times New Roman', serif;
+  --font-body: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ── Accent (lime — shared by both themes; a fill, never body text) ── */
+  --color-accent: #98f46f;
+  --accent-deep: #7fe052;
+  --accent-rgb: 152 244 111;
+
+  /* ── Spacing ── */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* ── Type scale ── */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+
+  /* ── Radii (controls use --radius-full pills) ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 999px;
+
+  /* ──────────────────────────────────────────────────────────
+     Dark theme (default — brand-accurate). :root carries it so
+     the app is never unthemed before the pre-paint script runs.
+     ────────────────────────────────────────────────────────── */
+  color-scheme: dark;
+
+  --color-bg-base: #0a0c0a;
+  --color-bg-surface: rgb(245 245 240 / 0.05);
+  --color-bg-elevated: rgb(245 245 240 / 0.07);
+
+  --color-border: rgb(245 245 240 / 0.10);
+  --border-strong: rgb(245 245 240 / 0.18);
+
+  --color-text-primary: #f5f5f0;
+  --color-text-secondary: rgb(245 245 240 / 0.78);
+  --color-text-muted: rgb(245 245 240 / 0.62);
+  --color-text-subtle: rgb(245 245 240 / 0.32);
+  --color-text-on-accent: #0a0c0a;
+
+  --color-accent-hover: var(--accent-deep);
+  --color-accent-light: rgb(152 244 111 / 0.12);
+
+  --color-error: #f4717a;
+  --color-error-light: rgb(244 113 122 / 0.14);
+  --color-success: #98f46f;
+  --color-warning: #f4b14f;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 10px 30px -12px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 28px 60px -28px rgb(0 0 0 / 0.75);
+
+  /* Atmosphere */
+  --grad-1: rgb(var(--accent-rgb) / 0.10);
+  --grad-2: rgb(var(--accent-rgb) / 0.05);
+  --grain-opacity: 0.5;
+  --grain-blend: overlay;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Light theme — ollive.ai's inverted cream/dark-green palette.
+   ────────────────────────────────────────────────────────── */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --color-bg-base: #f5f5f0;
+  --color-bg-surface: rgb(30 47 28 / 0.05);
+  --color-bg-elevated: #ffffff;
+
+  --color-border: rgb(30 47 28 / 0.12);
+  --border-strong: rgb(30 47 28 / 0.20);
+
+  --color-text-primary: #14201a;
+  --color-text-secondary: rgb(30 47 28 / 0.78);
+  --color-text-muted: rgb(30 47 28 / 0.62);
+  --color-text-subtle: rgb(30 47 28 / 0.40);
+  --color-text-on-accent: #14201a;
+
+  --color-accent-hover: #6fd047;
+  --color-accent-light: rgb(152 244 111 / 0.18);
+  --accent-deep: #4e9b2f; /* deeper lime for accent-as-text/icon to meet AA on cream */
+
+  --color-error: #dc2626;
+  --color-error-light: #fef2f2;
+  --color-success: #4e9b2f;
+  --color-warning: #b4791a;
+
+  --shadow-sm: 0 1px 2px rgb(30 47 28 / 0.06);
+  --shadow-md: 0 10px 30px -14px rgb(30 47 28 / 0.22), 0 2px 6px -2px rgb(30 47 28 / 0.10);
+  --shadow-lg: 0 28px 50px -30px rgb(30 47 28 / 0.35);
+
+  --grad-1: rgb(var(--accent-rgb) / 0.16);
+  --grad-2: rgb(var(--accent-rgb) / 0.10);
+  --grain-opacity: 0.35;
+  --grain-blend: multiply;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -10,17 +136,55 @@ html {
 }
 
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
-  line-height: 1.5;
+  font-family: var(--font-body);
+  line-height: 1.55;
   color: var(--color-text-primary);
   background-color: var(--color-bg-base);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.4s ease, color 0.3s ease;
+}
+
+/* Atmospheric lime glows — fixed, behind everything. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 44rem at 82% -12%, var(--grad-1), transparent 60%),
+    radial-gradient(46rem 36rem at -4% 112%, var(--grad-2), transparent 64%);
+}
+
+/* Fine film grain for editorial depth. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 #root {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 0;
+}
+
+/* Editorial display face for headings. */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
 a {
@@ -35,4 +199,43 @@ button {
 
 input, textarea {
   font-family: inherit;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Thin scrollbars matching the surfaces. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

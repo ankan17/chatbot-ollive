@@ -35,6 +35,7 @@ export interface CreateConversationInput {
 export interface PatchConversationInput {
   title?: string;
   status?: 'active' | 'archived';
+  model?: string;
 }
 
 export interface ImportConversationInput {
@@ -162,6 +163,9 @@ export function createConversationRepository(db: Db): ConversationRepository {
       }
       if (input.status !== undefined) {
         updates['status'] = input.status;
+      }
+      if (input.model !== undefined) {
+        updates['model'] = input.model;
       }
 
       const rows = await db

@@ -9,7 +9,6 @@ interface SidebarProps {
   statusFilter: 'active' | 'archived';
   status: 'idle' | 'loading' | 'success' | 'error';
   onSelect(id: string): void;
-  onNew(): void;
   onToggleFilter(s: 'active' | 'archived'): void;
   onRename(id: string, title: string): void;
   onArchive(id: string, archived: boolean): void;
@@ -21,33 +20,27 @@ export default function Sidebar({
   statusFilter,
   status,
   onSelect,
-  onNew,
   onToggleFilter,
   onRename,
   onArchive,
 }: SidebarProps) {
   return (
     <div className={styles.sidebar}>
-      <div className={styles.header}>
-        <button className={styles.newBtn} onClick={onNew} type="button">
-          + New chat
+      <div className={styles.filterRow}>
+        <button
+          className={`${styles.filterBtn} ${statusFilter === 'active' ? styles.activeFilter : ''}`}
+          onClick={() => onToggleFilter('active')}
+          type="button"
+        >
+          Active
         </button>
-        <div className={styles.filterRow}>
-          <button
-            className={`${styles.filterBtn} ${statusFilter === 'active' ? styles.activeFilter : ''}`}
-            onClick={() => onToggleFilter('active')}
-            type="button"
-          >
-            Active
-          </button>
-          <button
-            className={`${styles.filterBtn} ${statusFilter === 'archived' ? styles.activeFilter : ''}`}
-            onClick={() => onToggleFilter('archived')}
-            type="button"
-          >
-            Archived
-          </button>
-        </div>
+        <button
+          className={`${styles.filterBtn} ${statusFilter === 'archived' ? styles.activeFilter : ''}`}
+          onClick={() => onToggleFilter('archived')}
+          type="button"
+        >
+          Archived
+        </button>
       </div>
 
       <div className={styles.list}>

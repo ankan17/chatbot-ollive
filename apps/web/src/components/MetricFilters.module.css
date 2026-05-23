@@ -7,42 +7,51 @@
 
 .presets {
   display: flex;
-  gap: var(--space-1);
+  gap: 3px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 3px;
 }
 
 .presetBtn {
-  font-size: var(--text-sm);
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-full);
   background: none;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: border-color 0.1s, color 0.1s, background 0.1s;
+  transition: color 0.16s ease, background 0.16s ease;
 }
 
 .presetBtn:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--color-text-primary);
 }
 
 .presetBtn.active {
   background: var(--color-accent);
-  border-color: var(--color-accent);
   color: var(--color-text-on-accent);
 }
 
 .textInput {
+  font-family: var(--font-body);
   font-size: var(--text-sm);
-  padding: var(--space-1) var(--space-3);
+  padding: 8px 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-base);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  min-width: 120px;
+  min-width: 140px;
+}
+
+.textInput::placeholder {
+  color: var(--color-text-subtle);
 }
 
 .textInput:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--color-accent);
 }

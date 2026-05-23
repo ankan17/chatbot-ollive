@@ -11,7 +11,7 @@ export default function GuestBanner({ remaining, limit }: GuestBannerProps) {
   const plural = remaining === 1 ? 'message' : 'messages';
 
   return (
-    <div className={styles.banner}>
+    <div className={`${styles.banner} ${remaining === 0 ? styles.exhausted : ''}`}>
       <span className={styles.message}>
         {remaining > 0
           ? `${remaining} ${plural} left in your free trial.`

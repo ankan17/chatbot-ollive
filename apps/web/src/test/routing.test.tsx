@@ -5,6 +5,7 @@ import { MemoryRouter, Navigate, useNavigate } from 'react-router-dom';
 import { ApiError } from '../api/errors.js';
 import type { SessionUser } from '../api/types.js';
 import AppShell from '../components/AppShell.js';
+import { ThemeProvider } from '../state/themeContext.js';
 import Spinner from '../components/states/Spinner.js';
 import ErrorState from '../components/states/ErrorState.js';
 
@@ -35,9 +36,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   if (status === 'loading') return <Spinner />;
   if (!isAuthenticated || !user) return <Navigate to="/sign-in" replace />;
   return (
-    <AppShell user={user} onSignOut={() => void signOut()}>
-      {children}
-    </AppShell>
+    <ThemeProvider>
+      <AppShell user={user} onSignOut={() => void signOut()}>
+        {children}
+      </AppShell>
+    </ThemeProvider>
   );
 }
 

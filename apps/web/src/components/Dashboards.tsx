@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useMetrics } from '../hooks/useMetrics.js';
 import { useApiErrorRedirect } from '../hooks/useApiErrorRedirect.js';
+import { useSession } from '../state/sessionContext.js';
+import AppShell from './AppShell.js';
 import { presetToRange } from '../lib/time.js';
 import {
   toLatencyRows,
@@ -20,6 +22,7 @@ import ErrorState from './states/ErrorState.js';
 import styles from './Dashboards.module.css';
 
 export default function Dashboards() {
+  const { user, signOut } = useSession();
   const { data, status, error, filters, setFilters, reload } = useMetrics();
   const [preset, setPreset] = useState<RangePreset>('24h');
   const [provider, setProvider] = useState<string | undefined>(undefined);
@@ -44,7 +47,12 @@ export default function Dashboards() {
   }
 
   return (
+    <AppShell user={user!} onSignOut={() => void signOut()}>
     <div className={styles.page}>
+      <header className={styles.header}>
+        <h1 className={styles.title}>Observability</h1>
+        <p className={styles.subtitle}>Live request, latency, and token metrics across your conversations.</p>
+      </header>
       <MetricFilters
         preset={preset}
         provider={provider}
@@ -88,5 +96,6 @@ export default function Dashboards() {
         </>
       )}
     </div>
+    </AppShell>
   );
 }

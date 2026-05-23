@@ -1,13 +1,35 @@
 .page {
-  padding: var(--space-6);
-  overflow-y: auto;
   flex: 1;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-8) var(--space-12);
+}
+
+.header {
+  margin-bottom: var(--space-6);
+}
+.title {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+.subtitle {
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.cardsWrap {
+  margin-top: var(--space-6);
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
-  gap: var(--space-6);
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-5);
   margin-top: var(--space-6);
 }
 
@@ -15,23 +37,31 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: var(--space-4);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
 }
 
 .chartTitle {
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-secondary);
-  margin: 0 0 var(--space-3) 0;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  margin: 0 0 var(--space-4) 0;
 }
 
 .emptyChart {
-  height: 180px;
+  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-muted);
+  color: var(--color-text-subtle);
   font-size: var(--text-sm);
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .page {
+    padding: var(--space-6) var(--space-4) var(--space-10);
+  }
 }

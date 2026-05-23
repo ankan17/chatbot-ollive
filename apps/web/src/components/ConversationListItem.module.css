@@ -7,14 +7,15 @@
   cursor: pointer;
   position: relative;
   min-width: 0;
+  transition: background 0.14s ease;
 }
 
 .item:hover {
-  background: var(--color-bg-surface);
+  background: var(--color-bg-elevated);
 }
 
 .item.active {
-  background: var(--color-accent-light);
+  background: var(--color-bg-elevated);
 }
 
 .mainArea {
@@ -22,25 +23,44 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
 }
 
 .title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-sm);
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
 }
 
+.item:hover .title,
 .active .title {
-  color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.active .title::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  box-shadow: 0 0 8px 1px rgb(var(--accent-rgb) / 0.7);
+  flex-shrink: 0;
 }
 
 .time {
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-subtle);
 }
 
 .menuBtn {
@@ -52,7 +72,7 @@
   color: var(--color-text-muted);
   border-radius: var(--radius-sm);
   opacity: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1;
 }
 
@@ -62,7 +82,7 @@
 }
 
 .menuBtn:hover {
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-surface);
   color: var(--color-text-primary);
 }
 
@@ -71,12 +91,13 @@
   right: var(--space-2);
   top: 100%;
   background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   z-index: 10;
   min-width: 9rem;
   overflow: hidden;
+  backdrop-filter: blur(12px);
 }
 
 .dropdownItem {
@@ -86,6 +107,7 @@
   padding: var(--space-2) var(--space-3);
   background: none;
   border: none;
+  font-family: var(--font-body);
   font-size: var(--text-sm);
   color: var(--color-text-primary);
   cursor: pointer;

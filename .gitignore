@@ -7,3 +7,9 @@ dist/
 .DS_Store
 
 .claude/worktrees/
+.superpowers/
+.playwright-cli/
+
+# Local-only corporate TLS workaround (not for the deliverable)
+infra/zscaler.pem
+infra/docker-compose.override.yml
