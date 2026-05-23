@@ -20,3 +20,6 @@ export const errorCategory = z.enum([
   'other',
 ]);
 export type ErrorCategory = z.infer<typeof errorCategory>;
+
+export const messageStatus = z.enum(['complete', 'partial', 'error']);
+export type MessageStatus = z.infer<typeof messageStatus>;

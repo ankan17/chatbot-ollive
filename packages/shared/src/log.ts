@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { inferenceStatus } from './enums';
 
+// Truncation to this length is enforced by the SDK and re-applied by the ingestion
+// receiver — intentionally NOT a schema .max() constraint, so an over-long preview
+// is truncated rather than rejected.
 /** Max characters retained in input/output previews (PRD §9, A6). */
 export const PREVIEW_MAX_CHARS = 500;
 

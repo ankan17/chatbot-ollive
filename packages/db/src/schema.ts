@@ -35,6 +35,8 @@ export const conversations = pgTable(
     provider: text('provider').notNull(),
     model: text('model').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // NOTE: updatedAt is NOT auto-maintained by a DB trigger. Every UPDATE path in the
+    // application layer must set updatedAt explicitly (or add a BEFORE UPDATE trigger).
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
