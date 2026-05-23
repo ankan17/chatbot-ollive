@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useChat } from '../hooks/useChat.js';
 import { useGuestChat } from '../hooks/useGuestChat.js';
+import type { UseGuestChatResult } from '../hooks/useGuestChat.js';
 import { useConversations } from '../hooks/useConversations.js';
 import { useConversation } from '../hooks/useConversation.js';
 import { useSession } from '../state/sessionContext.js';
@@ -90,10 +91,14 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
   );
 }
 
-// ─── Guest chat ───────────────────────────────────────────────────────────────
+// ─── Guest chat (prop-driven — single useGuestChat instance in root) ──────────
 
-function GuestChat() {
-  const { state, remaining, limit, isStreaming, isCapped, send, stop } = useGuestChat();
+interface GuestChatProps {
+  guestChat: UseGuestChatResult;
+}
+
+function GuestChat({ guestChat }: GuestChatProps) {
+  const { state, remaining, limit, isStreaming, isCapped, send, stop } = guestChat;
   const messages = state.conversation.messages;
 
   return (
@@ -127,6 +132,8 @@ export default function ChatView() {
   const { isAuthenticated, status: sessionStatus } = useSession();
 
   const conversations = useConversations();
+
+  // Single useGuestChat instance — used by both guest rendering AND import-on-login
   const guestChat = useGuestChat();
 
   // Import-on-login: when session flips to authenticated AND there's a buffered guest conversation
@@ -171,7 +178,7 @@ export default function ChatView() {
               Sign-in failed. Please try again.
             </div>
           )}
-          <GuestChat />
+          <GuestChat guestChat={guestChat} />
         </div>
       </div>
     );
