@@ -28,4 +28,10 @@ done
 echo "    worker is ready"
 
 echo "==> Running E2E tests..."
+# Match the api's ingestion key from .env so the e2e auth succeeds even if the
+# operator changed INGESTION_API_KEY from the default (strips any inline comment).
+if [ -f .env ] && grep -q '^INGESTION_API_KEY=' .env; then
+  INGESTION_API_KEY="$(grep '^INGESTION_API_KEY=' .env | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//; s/[[:space:]]*$//')"
+  export INGESTION_API_KEY
+fi
 OLLIVE_E2E=1 pnpm vitest run --project e2e
