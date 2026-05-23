@@ -9,7 +9,11 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "db:generate": "pnpm --filter @ollive/db generate",
-    "db:migrate": "pnpm --filter @ollive/db migrate"
+    "db:migrate": "pnpm --filter @ollive/db migrate",
+    "start:api": "pnpm --filter @ollive/api start",
+    "start:worker": "pnpm --filter @ollive/ingestion-worker start",
+    "dev:api": "pnpm --filter @ollive/api dev",
+    "dev:worker": "pnpm --filter @ollive/ingestion-worker dev"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
