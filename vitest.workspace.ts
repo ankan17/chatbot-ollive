@@ -27,4 +27,5 @@ export default defineWorkspace([
       fileParallelism: false,
     },
   },
+  './apps/web/vite.config.ts',
 ]);
