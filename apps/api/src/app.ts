@@ -15,6 +15,10 @@ import { createUserRepository } from './users/repository.js';
 import { createConversationRepository } from './conversations/repository.js';
 import { authRouter } from './routes/auth.js';
 import { conversationsRouter } from './routes/conversations.js';
+import { chatRouter } from './routes/chat.js';
+import { guestChatRouter } from './routes/guest.js';
+import { metricsRouter } from './routes/metrics.js';
+import type { LLMProvider } from '@ollive/llm-sdk';
 // Import types.ts side-effect: augments Express.Request with req.user and req.guest
 import './types.js';
 
@@ -25,6 +29,8 @@ export interface AppDeps {
   logger?: Logger;
   /** Optional injected AuthProvider (DI seam for tests — default: createAuthProvider(config)) */
   authProvider?: AuthProvider;
+  /** Optional injected LLMProvider for chat (DI seam for tests — real provider wired in server.ts) */
+  chatProvider?: LLMProvider;
 }
 
 export function createApp(deps: AppDeps): express.Express {
@@ -80,14 +86,21 @@ export function createApp(deps: AppDeps): express.Express {
   // 9. Conversations CRUD + import router (Plan 4): mounted at /v1
   app.use('/v1', conversationsRouter({ config, conversations: conversationRepo }));
 
-  // FUTURE (Plan 5): chat (SSE) and metrics routers mount here
+  // 10. Chat SSE endpoint (Plan 5): POST /v1/conversations/:id/messages
+  app.use('/v1/conversations', chatRouter({ db, config, chatProvider: deps.chatProvider, logger }));
 
-  // 10. 404 fallback
+  // 11. Guest chat endpoint (Plan 5): POST /v1/guest/messages
+  app.use('/v1/guest', guestChatRouter({ redis, config, chatProvider: deps.chatProvider, logger }));
+
+  // 12. Metrics endpoints (Plan 5): GET /v1/metrics/*
+  app.use('/v1/metrics', metricsRouter({ db, config, logger }));
+
+  // 13. 404 fallback
   app.use((_req, _res, next) => {
     next(new AppError('not_found', 'Route not found'));
   });
 
-  // 11. Centralized error handler — MUST be last
+  // 14. Centralized error handler — MUST be last
   app.use(errorHandler(logger));
 
   return app;
