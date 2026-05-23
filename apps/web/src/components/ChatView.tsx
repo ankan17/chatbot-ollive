@@ -1,14 +1,18 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useChat } from '../hooks/useChat.js';
+import { useGuestChat } from '../hooks/useGuestChat.js';
 import { useConversations } from '../hooks/useConversations.js';
 import { useConversation } from '../hooks/useConversation.js';
 import { useSession } from '../state/sessionContext.js';
 import { createConversation } from '../api/conversations.js';
+import { loadGuestState } from '../state/guestMachine.js';
 import type { SseDoneData } from '../api/types.js';
 import MessageList from './MessageList.js';
 import Composer from './Composer.js';
 import Sidebar from './Sidebar.js';
+import GuestBanner from './GuestBanner.js';
+import GuestSignInPrompt from './GuestSignInPrompt.js';
 import Spinner from './states/Spinner.js';
 import EmptyState from './states/EmptyState.js';
 import styles from './ChatView.module.css';
@@ -43,7 +47,7 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
     resetDone.current = false;
   }, [conversationId]);
 
-  // On mount with a pending send (from new-conversation flow)
+  // On mount, check if there's a pending send from a just-created conversation
   useEffect(() => {
     if (!conversationId) return;
     const pending = sessionStorage.getItem('ollive.pendingSend');
@@ -86,14 +90,61 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
   );
 }
 
+// ─── Guest chat ───────────────────────────────────────────────────────────────
+
+function GuestChat() {
+  const { state, remaining, limit, isStreaming, isCapped, send, stop } = useGuestChat();
+  const messages = state.conversation.messages;
+
+  return (
+    <>
+      <GuestBanner remaining={remaining} limit={limit} />
+      {messages.length === 0 && !isStreaming ? (
+        <div className={styles.emptyCenter}>
+          <EmptyState
+            title="Try Ollive for free"
+            description="Send a message to start your free trial."
+          />
+        </div>
+      ) : (
+        <MessageList messages={messages} isStreaming={isStreaming} />
+      )}
+      {isCapped ? (
+        <GuestSignInPrompt />
+      ) : (
+        <Composer isStreaming={isStreaming} onSend={send} onStop={stop} />
+      )}
+    </>
+  );
+}
+
 // ─── Root ChatView ─────────────────────────────────────────────────────────────
 
 export default function ChatView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, status: sessionStatus } = useSession();
 
   const conversations = useConversations();
+  const guestChat = useGuestChat();
+
+  // Import-on-login: when session flips to authenticated AND there's a buffered guest conversation
+  const importAttempted = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated || importAttempted.current) return;
+    const savedGuest = loadGuestState();
+    if (!savedGuest || savedGuest.conversation.messages.length === 0) return;
+    importAttempted.current = true;
+    guestChat.importOnLogin().then((conv) => {
+      navigate(`/c/${conv.id}`);
+    }).catch(() => {
+      // If import fails (e.g. idempotent duplicate), just navigate home
+      navigate('/');
+    });
+  // Only re-run when isAuthenticated changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   // FE11: after first response done, refresh the conversation title in the sidebar
   const handleFirstDone = useCallback(
@@ -105,21 +156,22 @@ export default function ChatView() {
     [id, conversations],
   );
 
+  const authError = searchParams.get('auth_error');
+
   if (sessionStatus === 'loading') {
     return <Spinner />;
   }
 
   if (!isAuthenticated) {
-    // Guest branch — wired in Task 8; placeholder for now
     return (
       <div className={styles.chatView}>
         <div className={styles.main}>
-          <div className={styles.emptyCenter}>
-            <EmptyState
-              title="Try Ollive"
-              description="You have a free guest trial. Sign in to save your conversations."
-            />
-          </div>
+          {authError && (
+            <div className={styles.authError}>
+              Sign-in failed. Please try again.
+            </div>
+          )}
+          <GuestChat />
         </div>
       </div>
     );
@@ -139,6 +191,11 @@ export default function ChatView() {
         onArchive={conversations.archive}
       />
       <div className={styles.main}>
+        {authError && (
+          <div className={styles.authError}>
+            Sign-in failed. Please try again.
+          </div>
+        )}
         <AuthedChat conversationId={id} onFirstDone={handleFirstDone} />
       </div>
     </div>
