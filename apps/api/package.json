@@ -21,7 +21,8 @@
     "jose": "^5.9.0",
     "google-auth-library": "^9.15.0",
     "cookie-parser": "^1.4.7",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "drizzle-orm": "^0.38.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
