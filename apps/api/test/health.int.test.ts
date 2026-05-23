@@ -2,10 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import { runMigrations, createDb } from '@ollive/db';
-import { createRedis } from '../src/redis.js';
+import Redis from 'ioredis';
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
-import type { Redis } from 'ioredis';
 
 const env = {
   DATABASE_URL: process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive',
@@ -15,13 +14,15 @@ const env = {
 
 const config = loadConfig(env);
 let app: Express;
-let redis: Redis;
+// DB 0 = production; api integration tests use DB 1 to avoid cross-project key collisions
+// under Vitest parallelism (ingestion-worker uses DB 2).
+let redis: InstanceType<typeof Redis>;
 let db: ReturnType<typeof createDb>;
 
 beforeAll(async () => {
   await runMigrations(env.DATABASE_URL);
   db = createDb(env.DATABASE_URL);
-  redis = createRedis(env.REDIS_URL);
+  redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, db: 1 });
   app = createApp({ db, redis, config });
 });
 

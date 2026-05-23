@@ -4,7 +4,7 @@ import { createDb, runMigrations, inferenceLogs } from '@ollive/db';
 import { eq } from 'drizzle-orm';
 import type { InferenceLog } from '@ollive/shared';
 import { INGESTION_STREAM, INGESTION_DLQ, INGESTION_GROUP, PAYLOAD_FIELD } from '@ollive/shared';
-import { ensureGroup, processBatch } from '../src/consumer.js';
+import { ensureGroup, processBatch, reclaimStale } from '../src/consumer.js';
 import { createCounters } from '../src/counters.js';
 import type { Counters } from '../src/counters.js';
 import type { ConsumerDeps } from '../src/consumer.js';
@@ -20,7 +20,9 @@ let redis: Redis;
 beforeAll(async () => {
   await runMigrations(databaseUrl);
   db = createDb(databaseUrl);
-  redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  // DB 0 = production; ingestion-worker integration tests use DB 2 to avoid cross-project
+  // key collisions under Vitest parallelism (api tests use DB 1).
+  redis = new Redis(redisUrl, { maxRetriesPerRequest: null, db: 2 });
 });
 
 afterAll(async () => {
@@ -235,5 +237,112 @@ describe('consumer integration', () => {
 
     const dlqLen = await redis.xlen(INGESTION_DLQ);
     expect(dlqLen).toBe(1);
+  });
+
+  // IN5 — XAUTOCLAIM / reclaimStale: crashed-consumer recovery path.
+  // Approach: XADD a valid entry; read it into the PEL with a DIFFERENT consumer name via
+  // XREADGROUP (simulating a crash before ACK); then call reclaimStale with claimIdleMs=0
+  // so all pending entries are immediately reclaimable. Assert the entry is processed,
+  // the DB row exists, and the PEL is drained.
+  it('reclaimStale: pending entry from a crashed consumer is reclaimed, processed, and PEL drained', async () => {
+    const log = makeLog({ requestId: '10000000-0000-0000-0000-000000000007' });
+    const counters = createCounters();
+    const logger = createLogger();
+
+    // ensureGroup before enqueue so the group sees the new entry
+    await ensureGroup(redis, logger);
+
+    // XADD a valid entry
+    await enqueue(log);
+
+    // Read it into the PEL under a DIFFERENT consumer ("crashed-consumer"), but do NOT ack it.
+    // This simulates a consumer crash mid-processing.
+    await redis.xreadgroup(
+      'GROUP', INGESTION_GROUP, 'crashed-consumer',
+      'COUNT', '1',
+      'STREAMS', INGESTION_STREAM,
+      '>',
+    );
+
+    // Verify it is now pending under 'crashed-consumer'
+    const pendingBefore = await redis.xpending(INGESTION_STREAM, INGESTION_GROUP, '-', '+', 10);
+    expect(pendingBefore).toHaveLength(1);
+
+    // Build deps for the reclaiming consumer with claimIdleMs=0 (all pending entries reclaimable)
+    const reclaimDeps = {
+      redis,
+      db,
+      logger,
+      counters,
+      consumerName: 'reclaim-consumer',
+      batchSize: 10,
+      blockMs: 100,
+      maxDeliveries: 3,
+      // claimIdleMs=0 forces all pending entries to be immediately reclaimable regardless of idle time
+      claimIdleMs: 0,
+    };
+
+    const reclaimed = await reclaimStale(reclaimDeps);
+
+    expect(reclaimed).toBe(1);
+    expect(counters.processed).toBe(1);
+    expect(counters.dlq).toBe(0);
+
+    // Row should be written to the DB
+    const rows = await db.select().from(inferenceLogs).where(eq(inferenceLogs.requestId, log.requestId));
+    expect(rows).toHaveLength(1);
+
+    // PEL should be fully drained (entry was ACKed after successful processing)
+    const pendingAfter = await redis.xpending(INGESTION_STREAM, INGESTION_GROUP, '-', '+', 10);
+    expect(pendingAfter).toHaveLength(0);
+  });
+
+  // IN5 — reclaimStale poison path: a pending entry with an invalid payload passed to reclaimStale
+  // (deliveries=maxDeliveries) is immediately routed to the DLQ without further retry.
+  it('reclaimStale: pending poison payload is routed to DLQ and PEL drained', async () => {
+    const logger = createLogger();
+    await ensureGroup(redis, logger);
+
+    // XADD a non-JSON entry directly
+    await redis.xadd(INGESTION_STREAM, '*', PAYLOAD_FIELD, 'not-valid-json{');
+
+    // Read it into the PEL under 'crashed-consumer-2' without ACKing
+    await redis.xreadgroup(
+      'GROUP', INGESTION_GROUP, 'crashed-consumer-2',
+      'COUNT', '1',
+      'STREAMS', INGESTION_STREAM,
+      '>',
+    );
+
+    const pendingBefore = await redis.xpending(INGESTION_STREAM, INGESTION_GROUP, '-', '+', 10);
+    expect(pendingBefore).toHaveLength(1);
+
+    const counters = createCounters();
+    const reclaimDeps = {
+      redis,
+      db,
+      logger,
+      counters,
+      consumerName: 'reclaim-consumer-2',
+      batchSize: 10,
+      blockMs: 100,
+      maxDeliveries: 3,
+      claimIdleMs: 0,
+    };
+
+    const reclaimed = await reclaimStale(reclaimDeps);
+
+    expect(reclaimed).toBe(1);
+    // poison payload → DLQ, not processed
+    expect(counters.dlq).toBe(1);
+    expect(counters.processed).toBe(0);
+
+    // Entry is in the DLQ
+    const dlqLen = await redis.xlen(INGESTION_DLQ);
+    expect(dlqLen).toBe(1);
+
+    // PEL is drained
+    const pendingAfter = await redis.xpending(INGESTION_STREAM, INGESTION_GROUP, '-', '+', 10);
+    expect(pendingAfter).toHaveLength(0);
   });
 });

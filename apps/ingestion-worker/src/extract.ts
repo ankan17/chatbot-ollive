@@ -35,7 +35,7 @@ export interface InferenceLogRow {
  */
 export function extractMetadata(log: InferenceLog): InferenceLogRow {
   const usage = log.usage ?? null;
-  const meta = log.metadata ?? {};
+  const meta = log.metadata;
 
   // --- token columns ---
   const promptTokens = usage?.promptTokens ?? null;

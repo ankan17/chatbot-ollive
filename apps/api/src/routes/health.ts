@@ -16,20 +16,20 @@ export function healthRouter(deps: HealthRouterDeps): Router {
 
   router.get('/readyz', async (_req, res) => {
     const statuses = {
-      db: 'ok' as 'ok' | 'error',
-      redis: 'ok' as 'ok' | 'error',
+      db: 'ok' as 'ok' | 'down',
+      redis: 'ok' as 'ok' | 'down',
     };
 
     try {
       await deps.db.$client`select 1`;
     } catch {
-      statuses.db = 'error';
+      statuses.db = 'down';
     }
 
     try {
       await deps.redis.ping();
     } catch {
-      statuses.redis = 'error';
+      statuses.redis = 'down';
     }
 
     const httpStatus = statuses.db === 'ok' && statuses.redis === 'ok' ? 200 : 503;

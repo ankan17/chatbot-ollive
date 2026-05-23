@@ -37,6 +37,10 @@ function readPayload(fields: string[]): string | null {
 /**
  * Routes a problem entry to the DLQ stream, then ACKs it from the main PEL
  * so the pipeline never wedges (§18 / IN5).
+ *
+ * Trade-off: if the DLQ XADD throws (DLQ unavailable), the entry is still ACKed so the
+ * pipeline never wedges. The rawPayload is included in the error-level log so the entry
+ * remains manually recoverable even when the DLQ is unavailable.
  */
 async function routeToDlq(
   deps: ConsumerDeps,
@@ -55,7 +59,9 @@ async function routeToDlq(
       'sourceId', id,
     );
   } catch (err) {
-    deps.logger.error({ err, id, reason }, 'Failed to route entry to DLQ');
+    // DLQ unavailable — acknowledged trade-off: entry is still ACKed from the PEL below so the
+    // pipeline never wedges. The rawPayload is logged here for manual recovery.
+    deps.logger.error({ err, id, reason, rawPayload }, 'Failed to route entry to DLQ; payload logged for manual recovery');
   }
   // Always ack so the entry leaves the PEL
   await deps.redis.xack(INGESTION_STREAM, INGESTION_GROUP, id);
@@ -188,6 +194,9 @@ export async function reclaimStale(deps: ConsumerDeps): Promise<number> {
   const entries = response[1];
   if (!entries || entries.length === 0) return 0;
 
+  // Reclaimed entries are processed with deliveries=maxDeliveries so that a still-failing
+  // entry is immediately routed to the DLQ on this reclaim cycle (total real attempts ≈ 2,
+  // not 3 — one in processBatch with deliveries=1, one here with deliveries=maxDeliveries).
   for (const entry of entries) {
     await processEntry(deps, entry, deps.maxDeliveries);
   }

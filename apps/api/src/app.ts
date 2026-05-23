@@ -40,7 +40,12 @@ export function createApp(deps: AppDeps): express.Express {
   app.use(healthRouter({ db, redis }));
 
   // 5. Ingestion receiver
-  app.use('/v1', logsRouter({ redis, ingestionApiKey: config.ingestionApiKey, ingestionStreamMaxLen: config.ingestionStreamMaxLen }));
+  const logsRouterDeps = {
+    redis,
+    ingestionApiKey: config.ingestionApiKey,
+    ingestionStreamMaxLen: config.ingestionStreamMaxLen,
+  };
+  app.use('/v1', logsRouter(logsRouterDeps));
 
   // FUTURE (Plan 4/5): auth, conversations, chat, and metrics routers mount here
 

@@ -6,6 +6,9 @@ const envSchema = z.object({
   WORKER_CONSUMER_NAME: z.string().min(1).default('worker-1'),
   WORKER_BATCH_SIZE: z.coerce.number().int().positive().default(50),
   WORKER_BLOCK_MS: z.coerce.number().int().nonnegative().default(5000),
+  // maxDeliveries: total delivery attempts before routing to DLQ. With the default (3),
+  // an entry gets ~2 real attempts: 1 in processBatch (deliveries=1) and 1 in reclaimStale
+  // (deliveries=maxDeliveries), which immediately DLQs still-failing entries on the reclaim cycle.
   WORKER_MAX_DELIVERIES: z.coerce.number().int().positive().default(3),
   WORKER_CLAIM_IDLE_MS: z.coerce.number().int().positive().default(30000),
 });

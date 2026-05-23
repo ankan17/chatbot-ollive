@@ -3,11 +3,10 @@ import request from 'supertest';
 import type { Express } from 'express';
 import { randomUUID } from 'node:crypto';
 import { createApp } from '../src/app.js';
-import { createRedis } from '../src/redis.js';
+import Redis from 'ioredis';
 import { loadConfig } from '../src/config.js';
 import { createDb } from '@ollive/db';
 import { INGESTION_STREAM } from '@ollive/shared';
-import type { Redis } from 'ioredis';
 
 const TEST_API_KEY = 'test-ingestion-key';
 
@@ -19,7 +18,9 @@ const env = {
 
 const config = loadConfig(env);
 let app: Express;
-let redis: Redis;
+// DB 0 = production; api integration tests use DB 1 to avoid cross-project key collisions
+// under Vitest parallelism (ingestion-worker uses DB 2).
+let redis: InstanceType<typeof Redis>;
 
 function makeValidLog() {
   return {
@@ -46,7 +47,7 @@ function makeValidLog() {
 
 beforeAll(() => {
   const db = createDb(env.DATABASE_URL);
-  redis = createRedis(env.REDIS_URL);
+  redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null, db: 1 });
   app = createApp({ db, redis, config });
 });
 
@@ -125,14 +126,6 @@ describe('POST /v1/logs', () => {
     // IN9: email redacted before enqueue
     expect(payload.preview.input).toContain('[EMAIL]');
     expect(payload.preview.input).not.toContain('pii@example.com');
-  });
-});
-
-describe('GET /healthz', () => {
-  it('returns 200 { status: "ok" }', async () => {
-    const res = await request(app).get('/healthz');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: 'ok' });
   });
 });
 
