@@ -28,5 +28,7 @@ export function createAuthProvider(config: AppConfig): AuthProvider {
       redirectUri: config.googleRedirectUri,
     });
   }
-  return new DevAuthProvider();
+  // Dev mode redirects to the API's own callback; honor the configured redirect URI
+  // (GOOGLE_REDIRECT_URI / API_BASE_URL / PORT) rather than a hardcoded localhost:4000.
+  return new DevAuthProvider({ callbackBase: config.googleRedirectUri });
 }
