@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Status** | Approved for implementation |
-| **Version** | 1.1 |
+| **Version** | 1.2 |
 | **Date** | 2026-05-23 |
 | **Author** | Ankan Poddar |
 | **Context** | Take-home assignment — AI infrastructure / platform engineering |
@@ -208,10 +208,12 @@ Two Node processes plus infra: **`api`** and **`ingestion-worker`**. This honors
 ### SDK & Logging
 - **FR8** — Every LLM call is wrapped by the SDK, which captures: provider, model, latency, time-to-first-token, token usage (prompt/completion/total), timestamps, status, request/conversation/message IDs, and truncated input/output previews.
 - **FR9** — The SDK ships each log to the ingestion endpoint asynchronously, never blocking or failing the user-facing response.
+- **FR19** — The SDK redacts PII (default on) from previews/metadata before shipping, replacing detections with typed placeholders; raw PII never enters the telemetry stream.
 
 ### Ingestion & Storage
 - **FR10** — The ingestion endpoint authenticates the caller (service API key), validates the payload (Zod), and enqueues it to Redis Streams, returning `202 Accepted`.
 - **FR11** — The worker consumes the stream, parses/normalizes the payload, and writes to `inference_logs` idempotently (dedup on `request_id`).
+- **FR20** — During ingestion the worker extracts derived metadata (cost, error category, throughput, content sizes, redaction counts) and stores it alongside the raw log (§16.1).
 
 ### Dashboards
 - **FR12** — A dashboard shows **latency** (p50/p95/p99 over time), **throughput** (requests/interval), **error rate**, and **token usage** (prompt/completion/total over time), filterable by time range, provider, and model.
@@ -553,7 +555,11 @@ CREATE TABLE inference_logs (
   error_message         TEXT,
   started_at            TIMESTAMPTZ,
   completed_at          TIMESTAMPTZ,
-  metadata              JSONB NOT NULL DEFAULT '{}',
+  -- extracted (worker-derived) metadata; see §16.1 ----------------------
+  estimated_cost_usd    NUMERIC(12,6),               -- tokens × per-model price table
+  error_category        TEXT CHECK (error_category IN
+                          ('rate_limit','timeout','auth','content_filter','other')),
+  metadata              JSONB NOT NULL DEFAULT '{}',  -- remaining derived signals
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()  -- ingestion time
 );
 CREATE INDEX idx_logs_created    ON inference_logs (created_at DESC);
@@ -618,6 +624,14 @@ The deliverable "lightweight SDK" lives in `packages/llm-sdk`. It wraps an `LLMP
 - **SDK7** — Configurable: `ingestionUrl`, `apiKey`, `previewMaxChars` (default 500), `flushIntervalMs`, `maxBufferSize`, `maxRetries`.
 - **SDK8** — Zero behavioral coupling to Express or the chat schema; depends only on `packages/shared` types.
 
+### PII Redaction (telemetry only)
+
+- **SDK9** — A pluggable `Redactor` scrubs PII from the data the SDK emits — `input`/`output` previews and string metadata values — **before** it is buffered or shipped. It is **on by default** (`PII_REDACTION`), privacy-by-default. It applies only to the telemetry stream; the user's conversation in the `messages` table (written by the API, not the SDK) is untouched.
+- **SDK10** — Redaction runs at **log-assembly (completion) time on the fully-assembled text, then truncation is applied** — never per-delta and never on the streaming hot path, so it adds **zero latency to the user's response**. Order matters: redact first so truncation can't slice a PII token and leak a fragment.
+- **SDK11** — **Default detector is pattern-based** (deterministic, in-process, no external deps): email, phone, credit card (Luhn-validated), SSN, IP/IBAN, and secrets/keys (known prefixes + high-entropy tokens). An **optional cheap-LLM extension** (`PII_REDACTION=llm`) can be enabled to catch unstructured PII (names/addresses) via a small/fast model; because it costs latency + a model call, it is opt-in and best run at the ingestion backstop (IN9) rather than inline.
+- **SDK12** — Detected PII is replaced with **typed placeholders** (`[EMAIL]`, `[CREDIT_CARD]`, …), preserving type for debugging without revealing values. The per-log redaction **counts** (e.g., `{ "email": 2 }`) are written to `metadata.redactions` — a useful signal containing no PII.
+- **SDK13** — **Fail-closed**: if the redactor throws, the SDK drops the preview entirely rather than ship raw text. A privacy failure must never default to leaking.
+
 ### SDK Interfaces (illustrative)
 
 ```ts
@@ -628,6 +642,13 @@ interface InferenceLoggerConfig {
   flushIntervalMs?: number;   // default 1000
   maxBufferSize?: number;     // default 500
   maxRetries?: number;        // default 3
+  redaction?: 'off' | 'pattern' | 'llm';  // default 'pattern'
+  redactor?: Redactor;        // override the default implementation
+}
+
+interface Redactor {
+  // returns redacted text + counts of each PII type found (no values)
+  redact(text: string): { text: string; counts: Record<string, number> };
 }
 
 interface CallContext {
@@ -701,11 +722,44 @@ interface AuthProvider {
 - **IN1** — **Receiver** (`POST /v1/logs`, in `api`): API-key auth → Zod validation → `XADD inference-logs * payload <json>` → `202`. No DB writes.
 - **IN2** — **Stream**: Redis Streams key `inference-logs`, capped with approximate `MAXLEN ~ N` to bound memory.
 - **IN3** — **Consumer group** `ingestion-workers`; each worker instance is a named consumer reading via `XREADGROUP`.
-- **IN4** — **Processing**: parse → normalize → **upsert** into `inference_logs` on `request_id` conflict (idempotent) → `XACK`.
+- **IN4** — **Processing**: parse → normalize → **extract derived metadata** (IN10) → **upsert** into `inference_logs` on `request_id` conflict (idempotent) → `XACK`.
 - **IN5** — **Failure handling**: unacked entries are recovered via `XAUTOCLAIM` after an idle threshold (handles crashed consumers); malformed entries that repeatedly fail are routed to a `inference-logs-dlq` stream and acked, so the pipeline never wedges.
 - **IN6** — **Backpressure**: the receiver enqueues quickly; the worker controls its own read batch size, decoupling spikes from DB write throughput.
 - **IN7** — Worker emits structured logs + a processed/failed counter for observability.
 - **IN8** — Guest-phase inference logs carry `metadata.guestSessionId` with null `conversation_id`/`user_id` (the conversation isn't persisted until import); they still contribute to provider/model/latency/token dashboards.
+- **IN9** — **Redaction backstop**: the receiver re-applies PII redaction to previews/metadata before enqueue (defense in depth — the SDK is the primary scrubber, but it is standalone and could be embedded in another app or misconfigured). The optional cheap-LLM redaction extension, if enabled, runs here where the latency budget is looser.
+- **IN10** — **Metadata extraction**: the worker derives structured metadata from each raw log and stores it — see [§16.1](#161-extracted-metadata).
+
+### 16.1 Extracted Metadata
+
+The brief calls for storing **"extracted metadata"** distinct from raw inference logs. The distinction is the difference between what the SDK *captures* and what the ingestion worker *derives*:
+
+| | **Raw (captured) metadata** | **Extracted (derived) metadata** |
+|---|---|---|
+| Produced by | SDK, at the call site | Ingestion worker, during processing |
+| Examples | provider, model, latency, TTFT, token usage, status, timestamps, redacted previews | estimated cost, throughput (tokens/sec), normalized error category, content lengths, context size, PII redaction counts, parsed SDK/client info, language guess |
+| Why separate | the literal facts of the call | computed signals the platform adds to make raw logs analyzable |
+
+The worker's extraction stage computes, per log:
+- **`estimated_cost_usd`** — token usage × a per-model price table (a high-value dashboard metric → **dedicated column**).
+- **`error_category`** — raw provider error normalized to `rate_limit | timeout | auth | content_filter | other` (→ **dedicated column**, powers the error dashboard).
+- **`tokens_per_second`**, `prompt_chars`, `output_chars`, `context_message_count` — throughput/size signals.
+- **`redactions`** — PII counts from the redaction layer (SDK12).
+- **`sdk_version`, `app_name`** — parsed from the log envelope.
+
+**Where it's stored**: the two most-queried derived fields (`estimated_cost_usd`, `error_category`) are **typed columns** on `inference_logs`; the rest live under a documented shape in the `metadata` JSONB. We deliberately **do not** create a separate `extracted_metadata` table — the relationship to a log is strictly 1:1, so a side table would add joins and write amplification for no benefit ([§23](#23-tradeoffs-and-design-decisions)). The conceptual separation is preserved in documentation and field naming, not in physical tables.
+
+```jsonc
+// inference_logs.metadata (worker-extracted shape, on top of SDK-sent extras)
+{
+  "tokensPerSecond": 156.0,
+  "promptChars": 1840, "outputChars": 712,
+  "contextMessageCount": 8,
+  "redactions": { "email": 1, "phone": 0 },
+  "sdkVersion": "0.1.0", "appName": "ollive-web",
+  "guestSessionId": null
+}
+```
 
 ---
 
@@ -764,7 +818,7 @@ Designed for demo scale (A1) with a documented scale-out path:
 - **SE3** — Session JWT is httpOnly + SameSite=Lax + Secure (prod); short-to-medium expiry; signed with `JWT_SECRET`.
 - **SE4** — CORS restricted to the configured web origin; credentials mode enabled for the cookie.
 - **SE5** — All input validated by Zod; all SQL parameterized via Drizzle (no string-built queries).
-- **SE6** — **PII awareness**: input/output previews may contain user content. They are truncated to 500 chars and confined to `inference_logs`; full content stays in `messages`. A `PREVIEW_REDACTION` toggle (off by default) is the documented hook for masking.
+- **SE6** — **PII redaction**: input/output previews may contain user content, so the SDK redacts PII **on by default** before shipping ([§13](#13-sdk-requirements), SDK9–13), the ingestion worker re-applies it as a backstop (IN9), and previews are truncated to 500 chars and confined to `inference_logs` (full content stays in `messages`). In the default configuration PII never reaches the telemetry store or dashboards.
 - **SE7** — TLS terminated upstream in production (A9); internal traffic is within the compose network.
 - **SE8** — Authorization: every conversation/message/metric query is scoped to the authenticated `user_id`; no cross-user access.
 - **SE9** — Basic rate limiting on auth and chat endpoints (documented; simple in-memory limiter at demo scale).
@@ -818,6 +872,8 @@ Designed for demo scale (A1) with a documented scale-out path:
 - **Guest trial in client local state.** Anonymous conversations live in the browser (mirrored to `localStorage`), not the DB, until sign-in — zero anonymous write load and trivial cleanup, at the cost of a client-side import step on login. The cap is enforced server-side so it can't be bypassed in-session.
 - **`title_source` flag over string comparison.** Tracking title provenance (`default`/`auto`/`user`) cleanly separates "untouched default" from "user happened to type 'New conversation'", so auto-naming never clobbers an intentional title.
 - **Async auto-naming as a logged LLM call.** Title generation reuses the provider + SDK path (tagged `kind=title_generation`), so it's observable in the same dashboards and never blocks the user's response.
+- **Redact at source, fail-closed, with an ingestion backstop.** Scrubbing PII in the SDK before it ships keeps PII out of the network, the store, and dashboards entirely; doing it at completion time keeps it off the user's hot path; failing closed (drop preview on error) means a redactor bug can't leak. Pattern-based detection is the deterministic default; the cheap-LLM extension trades cost/latency for unstructured-PII coverage and is therefore opt-in and placed at the looser-budget ingestion stage.
+- **Extracted metadata lives in `inference_logs`, not a side table.** Derived fields are strictly 1:1 with a log; hot ones (`estimated_cost_usd`, `error_category`) are typed columns for fast dashboard filtering, the rest sit in `metadata` JSONB. A separate `extracted_metadata` table would add joins and write amplification with no analytical upside at this scale.
 
 ---
 
@@ -852,6 +908,11 @@ Designed for demo scale (A1) with a documented scale-out path:
 - [ ] **AC19** — After the limit, the user is prompted to sign in; after signing in, the prior conversation is imported and resumes with full context.
 - [ ] **AC20** — A new conversation is auto-named from its first exchange; a conversation the user renamed (including to "New conversation") is never auto-renamed.
 
+### Privacy & Data
+
+- [ ] **AC21** — With redaction on (default), a message containing an email/phone/card/SSN/API key produces an `inference_logs` row whose previews show typed placeholders (`[EMAIL]`, …) and whose `metadata.redactions` counts are populated — no raw PII in the telemetry store; the user's `messages` row remains intact.
+- [ ] **AC22** — Each `inference_logs` row carries extracted metadata: `estimated_cost_usd`, normalized `error_category` (for failures), and derived `metadata` signals (tokens/sec, content lengths, redaction counts).
+
 ---
 
 ## 25. Intentional Simplifications
@@ -876,5 +937,6 @@ Called out explicitly so reviewers know these were deliberate, not oversights:
 |---|---|---|
 | 1.0 | 2026-05-23 | Initial PRD: chat app, logging SDK, event-driven ingestion (Redis Streams), PostgreSQL schema, provider abstraction (Vercel AI SDK), Google OAuth, streaming/cancel, dashboards, deployment, tradeoffs, acceptance criteria. |
 | 1.1 | 2026-05-23 | Anonymous guest trial (client-local conversation, server-enforced cap, import-on-login) and LLM auto-naming of conversations via a `title_source` flag. |
+| 1.2 | 2026-05-23 | SDK PII redaction layer (pattern-based default + optional cheap-LLM extension, typed placeholders, telemetry-only, fail-closed, ingestion backstop) and an explicit extracted-metadata stage (raw vs derived; `estimated_cost_usd` + `error_category` columns, derived signals in `metadata`). |
 ```
 
