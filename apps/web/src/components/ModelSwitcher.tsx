@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useModels } from '../hooks/useModels.js';
 import { getStoredModel, setStoredModel } from '../api/models.js';
+import { patchConversation } from '../api/conversations.js';
 import styles from './ModelSwitcher.module.css';
 
 function Chevron() {
@@ -19,15 +20,33 @@ function Check() {
   );
 }
 
-export default function ModelSwitcher() {
+interface ModelSwitcherProps {
+  /** Active conversation id — when set, picking a model retargets THIS conversation. */
+  conversationId?: string;
+  /** The active conversation's persisted model — the source of truth when in a conversation. */
+  conversationModel?: string;
+  /** Called after the conversation's model is patched, so the parent can refresh. */
+  onModelChange?: () => void;
+}
+
+export default function ModelSwitcher({
+  conversationId,
+  conversationModel,
+  onModelChange,
+}: ModelSwitcherProps = {}) {
   const { models, defaultModel } = useModels();
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string | undefined>(() => getStoredModel());
+  // Optimistic pick for instant feedback. Parent remounts via `key` on conversation
+  // change, so this resets and the per-conversation model shows.
+  const [selected, setSelected] = useState<string | undefined>(undefined);
 
   const ids = models.map((m) => m.id);
+  // In a conversation, that conversation's model is the truth; otherwise the stored
+  // default (used for the next new conversation). A fresh pick overrides either.
+  const preferred = selected ?? (conversationId ? conversationModel : getStoredModel());
   const activeId =
-    selected && ids.includes(selected)
-      ? selected
+    preferred && ids.includes(preferred)
+      ? preferred
       : defaultModel && ids.includes(defaultModel)
         ? defaultModel
         : ids[0];
@@ -54,9 +73,14 @@ export default function ModelSwitcher() {
   }
 
   function choose(id: string) {
-    setSelected(id);
-    setStoredModel(id);
     setOpen(false);
+    if (id === activeId) return; // already the active model — nothing to do
+    setSelected(id);
+    setStoredModel(id); // remember as the default for the next new conversation
+    // Inside a conversation, retarget it so subsequent messages use the new model.
+    if (conversationId) {
+      void patchConversation(conversationId, { model: id }).then(() => onModelChange?.());
+    }
   }
 
   return (

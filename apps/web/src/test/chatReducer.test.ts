@@ -122,6 +122,32 @@ describe('chatReducer', () => {
     expect(state.error).toEqual(errorData);
     const assistant = state.messages.find((m) => m.id === 'msg-1')!;
     expect(assistant.status).toBe('error');
+    expect(assistant.errorReason).toBe('oops');
+  });
+
+  it("keeps a failed message's error reason after the next send", () => {
+    let state = chatReducer(initialChatState, {
+      type: 'sendUser',
+      content: 'q',
+      tempUserId: 'tmp-1',
+    });
+    state = chatReducer(state, {
+      type: 'streamStart',
+      data: { messageId: 'msg-1', requestId: 'req-1' },
+    });
+    state = chatReducer(state, {
+      type: 'streamError',
+      data: { code: 'internal_error', message: 'An unexpected error occurred' },
+    });
+
+    // Sending another message clears the transient error banner...
+    state = chatReducer(state, { type: 'sendUser', content: 'again', tempUserId: 'tmp-2' });
+    expect(state.error).toBeUndefined();
+
+    // ...but the failed message still carries its own reason (no fallback flip).
+    const failed = state.messages.find((m) => m.id === 'msg-1')!;
+    expect(failed.status).toBe('error');
+    expect(failed.errorReason).toBe('An unexpected error occurred');
   });
 
   it('cancelled keeps partial content + status partial + phase cancelled', () => {

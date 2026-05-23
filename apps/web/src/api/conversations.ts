@@ -32,7 +32,7 @@ export function getConversation(id: string, signal?: AbortSignal): Promise<Conve
 
 export function patchConversation(
   id: string,
-  patch: { title?: string; status?: 'active' | 'archived' },
+  patch: { title?: string; status?: 'active' | 'archived'; model?: string },
 ): Promise<Conversation> {
   return request<Conversation>(`/v1/conversations/${id}`, { method: 'PATCH', body: patch });
 }

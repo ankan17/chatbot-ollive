@@ -38,9 +38,22 @@ describe('MessageBubble', () => {
     expect(screen.getByText('Stopped')).toBeInTheDocument();
   });
 
-  it('shows Error tag for error status', () => {
+  it("shows the message's own error reason for error status", () => {
+    const msg = makeMsg({
+      role: 'assistant',
+      content: '',
+      status: 'error',
+      errorReason: 'Rate limit reached. Please try again shortly.',
+    });
+    render(<MessageBubble message={msg} />);
+    expect(
+      screen.getByText('Rate limit reached. Please try again shortly.'),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to a generic message when error status has no reason', () => {
     const msg = makeMsg({ role: 'assistant', content: '', status: 'error' });
     render(<MessageBubble message={msg} />);
-    expect(screen.getByText('Error')).toBeInTheDocument();
+    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
   });
 });

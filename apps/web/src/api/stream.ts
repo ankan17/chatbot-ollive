@@ -5,6 +5,7 @@ import type {
   SseTokenData,
   SseDoneData,
   SseErrorData,
+  SseTitleData,
 } from './types.js';
 
 // ─── SSE frame parser ─────────────────────────────────────────────────────────
@@ -14,7 +15,7 @@ export interface SseFrameParser {
   flush: () => SseEvent[];
 }
 
-const KNOWN_EVENTS = new Set(['start', 'token', 'done', 'error']);
+const KNOWN_EVENTS = new Set(['start', 'token', 'done', 'error', 'title']);
 
 function parseFrame(frame: string): SseEvent | null {
   const lines = frame.split('\n');
@@ -83,6 +84,7 @@ export interface StreamChatCallbacks {
   onToken?: (d: SseTokenData) => void;
   onDone?: (d: SseDoneData) => void;
   onError?: (d: SseErrorData) => void;
+  onTitle?: (d: SseTitleData) => void;
 }
 
 export interface StreamChatOptions extends StreamChatCallbacks {
@@ -102,6 +104,9 @@ function dispatchEvent(event: SseEvent, callbacks: StreamChatCallbacks): void {
       break;
     case 'error':
       callbacks.onError?.(event.data);
+      break;
+    case 'title':
+      callbacks.onTitle?.(event.data);
       break;
   }
 }

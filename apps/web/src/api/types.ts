@@ -15,6 +15,7 @@ export type {
   SseTokenData,
   SseDoneData,
   SseErrorData,
+  SseTitleData,
   Usage,
   OverviewMetrics,
   MetricsRange,
@@ -35,7 +36,11 @@ export type {
 } from '@ollive/shared/api';
 
 // Convenience aliases
-export type { Message as ChatMessage, ConversationDetail as ConversationWithMessages } from '@ollive/shared/api';
+export type { ConversationDetail as ConversationWithMessages } from '@ollive/shared/api';
+
+import type { Message } from '@ollive/shared/api';
+/** Client message: the server Message plus a transient reason for a failed send. */
+export type ChatMessage = Message & { errorReason?: string };
 
 // Client-only shapes (no contract equivalent)
 export interface GuestMessageInput {

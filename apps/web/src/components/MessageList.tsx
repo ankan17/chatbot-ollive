@@ -6,12 +6,18 @@ import styles from './MessageList.module.css';
 interface MessageListProps {
   messages: ChatMessage[];
   isStreaming: boolean;
+  /** True when the stream just finished and the typewriter should type out the buffered tail. */
+  streamFinishing?: boolean;
 }
 
-export default function MessageList({ messages, isStreaming }: MessageListProps) {
+export default function MessageList({ messages, isStreaming, streamFinishing = false }: MessageListProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
   const [stickToBottom, setStickToBottom] = useState(true);
+  // Mirror for the ResizeObserver callback, which closes over a single render.
+  const stickToBottomRef = useRef(stickToBottom);
+  stickToBottomRef.current = stickToBottom;
 
   // Track user scroll to decide if we should stick to bottom
   useEffect(() => {
@@ -36,6 +42,20 @@ export default function MessageList({ messages, isStreaming }: MessageListProps)
     }
   }, [messages, isStreaming, stickToBottom]);
 
+  // Follow the typewriter: it grows the DOM between tokens (and during the
+  // finishing tail) without a `messages` change, so keep pinned to bottom here.
+  useEffect(() => {
+    const inner = innerRef.current;
+    if (!inner) return;
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) {
+        sentinelRef.current?.scrollIntoView({ block: 'end' });
+      }
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
+
   function scrollToLatest() {
     setStickToBottom(true);
     sentinelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -44,14 +64,20 @@ export default function MessageList({ messages, isStreaming }: MessageListProps)
   return (
     <div className={styles.wrap}>
       <div ref={containerRef} className={styles.scroll}>
-        <div className={styles.inner}>
-          {messages.map((msg, i) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              isStreaming={isStreaming && i === messages.length - 1}
-            />
-          ))}
+        <div ref={innerRef} className={styles.inner}>
+          {messages.map((msg, i) => {
+            const isLiveAssistant =
+              i === messages.length - 1 && msg.role === 'assistant';
+            return (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                isStreaming={isStreaming && i === messages.length - 1}
+                animate={isLiveAssistant && (isStreaming || streamFinishing)}
+                expectMore={isLiveAssistant && isStreaming}
+              />
+            );
+          })}
           <div ref={sentinelRef} className={styles.sentinel} />
         </div>
       </div>

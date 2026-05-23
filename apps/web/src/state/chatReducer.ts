@@ -97,7 +97,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: state.messages.map((m) =>
-          m.id === state.currentAssistantId ? { ...m, status: 'error' } : m,
+          m.id === state.currentAssistantId
+            ? { ...m, status: 'error', errorReason: action.data.message }
+            : m,
         ),
         phase: 'error',
         error: action.data,

@@ -52,6 +52,18 @@ describe('createSseParser', () => {
     expect(flushed).toHaveLength(1);
     expect(flushed[0]).toEqual({ event: 'token', data: { delta: 'x' } });
   });
+
+  it('(5b) parses a title event', () => {
+    const parser = createSseParser();
+    const events = parser.push(
+      'event: title\ndata: {"conversationId":"c1","title":"Market sizing tips"}\n\n',
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({
+      event: 'title',
+      data: { conversationId: 'c1', title: 'Market sizing tips' },
+    });
+  });
 });
 
 // ─── streamChat helpers ───────────────────────────────────────────────────────
@@ -114,6 +126,33 @@ describe('streamChat', () => {
     expect(onDone.mock.calls[0][0].usage.totalTokens).toBe(13);
     expect(onError).not.toHaveBeenCalled();
     expect(order).toEqual(['start:m1', 'token:Hello', 'token: world', 'token:!', 'done:stop']);
+  });
+
+  it('(6b) title event after done dispatches onTitle (stream keeps reading past done)', async () => {
+    const body = makeReadableStream([
+      'event: start\ndata: {"messageId":"m1","requestId":"r1"}\n\n',
+      'event: token\ndata: {"delta":"Hi"}\n\n',
+      'event: done\ndata: {"messageId":"m1","finishReason":"stop","usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2}}\n\n',
+      'event: title\ndata: {"conversationId":"c1","title":"Market sizing tips"}\n\n',
+    ]);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+
+    const order: string[] = [];
+    const onDone = vi.fn((d: SseDoneData) => { order.push('done:' + d.finishReason); });
+    const onTitle = vi.fn((d: { conversationId: string; title: string }) => { order.push('title:' + d.title); });
+
+    const { streamChat } = await import('../api/stream.js');
+    await streamChat('http://api/v1/conversations/c1/messages', { content: 'hi' }, {
+      onDone,
+      onTitle,
+    });
+
+    expect(onDone).toHaveBeenCalledOnce();
+    expect(onTitle).toHaveBeenCalledOnce();
+    expect(onTitle.mock.calls[0][0]).toEqual({ conversationId: 'c1', title: 'Market sizing tips' });
+    // title must arrive AFTER done (done re-enables the composer; title trails it)
+    expect(order).toEqual(['done:stop', 'title:Market sizing tips']);
   });
 
   it('(7) server error event: start→error → onError fires, promise RESOLVES', async () => {

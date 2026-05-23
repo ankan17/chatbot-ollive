@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { chatReducer, initialChatState } from '../state/chatReducer.js';
 import { streamChat } from '../api/stream.js';
 import { buildUrl } from '../api/config.js';
-import type { ChatMessage, SseDoneData, SseErrorData } from '../api/types.js';
+import type { ChatMessage, SseErrorData, SseTitleData } from '../api/types.js';
 
 export interface UseChatResult {
   state: ReturnType<typeof chatReducer>;
@@ -14,12 +14,10 @@ export interface UseChatResult {
 
 export function useChat(
   conversationId: string,
-  onFirstDone?: (d: SseDoneData) => void,
+  onTitle?: (d: SseTitleData) => void,
 ): UseChatResult {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const abortRef = useRef<AbortController | null>(null);
-  // Track whether we've already fired onFirstDone for the current stream
-  const firedFirstDone = useRef(false);
 
   const send = useCallback(
     (content: string) => {
@@ -28,7 +26,6 @@ export function useChat(
 
       const ac = new AbortController();
       abortRef.current = ac;
-      firedFirstDone.current = false;
 
       const url = buildUrl(`/v1/conversations/${conversationId}/messages`);
 
@@ -42,14 +39,12 @@ export function useChat(
         },
         onDone(data) {
           dispatch({ type: 'streamDone', data });
-          if (!firedFirstDone.current) {
-            firedFirstDone.current = true;
-            onFirstDone?.(data);
-          }
         },
         onError(data: SseErrorData) {
           dispatch({ type: 'streamError', data });
         },
+        // Trailing event after done — the auto-generated conversation title.
+        onTitle,
       }).catch((err: unknown) => {
         const name = (err as { name?: string })?.name;
         if (name === 'AbortError') {
@@ -65,7 +60,7 @@ export function useChat(
         }
       });
     },
-    [conversationId, onFirstDone],
+    [conversationId, onTitle],
   );
 
   // Abort in-flight stream on unmount

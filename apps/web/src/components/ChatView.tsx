@@ -8,7 +8,7 @@ import { useConversation } from '../hooks/useConversation.js';
 import { useSession } from '../state/sessionContext.js';
 import { createConversation } from '../api/conversations.js';
 import { loadGuestState } from '../state/guestMachine.js';
-import type { SseDoneData } from '../api/types.js';
+import type { SseTitleData } from '../api/types.js';
 import MessageList from './MessageList.js';
 import Composer, { type ComposerHandle } from './Composer.js';
 import ChatHero from './ChatHero.js';
@@ -25,14 +25,14 @@ import styles from './ChatView.module.css';
 
 interface AuthedChatProps {
   conversationId: string | undefined;
-  onFirstDone?: (d: SseDoneData) => void;
+  onTitle?: (d: SseTitleData) => void;
 }
 
-function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
+function AuthedChat({ conversationId, onTitle }: AuthedChatProps) {
   const navigate = useNavigate();
   const { state, isStreaming, send, stop, reset } = useChat(
     conversationId ?? '',
-    onFirstDone,
+    onTitle,
   );
 
   // Load history when conversationId is set (FE4 — resume)
@@ -92,7 +92,11 @@ function AuthedChat({ conversationId, onFirstDone }: AuthedChatProps) {
           onPickPrompt={(p) => composerRef.current?.fill(p)}
         />
       ) : (
-        <MessageList messages={state.messages} isStreaming={isStreaming} />
+        <MessageList
+          messages={state.messages}
+          isStreaming={isStreaming}
+          streamFinishing={state.phase === 'done'}
+        />
       )}
       <Composer ref={composerRef} isStreaming={isStreaming} onSend={handleSend} onStop={stop} />
     </>
@@ -120,7 +124,11 @@ function GuestChat({ guestChat }: GuestChatProps) {
           onPickPrompt={(p) => composerRef.current?.fill(p)}
         />
       ) : (
-        <MessageList messages={messages} isStreaming={isStreaming} />
+        <MessageList
+          messages={messages}
+          isStreaming={isStreaming}
+          streamFinishing={state.phase === 'awaiting'}
+        />
       )}
       {isCapped ? (
         <GuestSignInPrompt />
@@ -161,13 +169,19 @@ export default function ChatView() {
     });
   }, [isAuthenticated, navigate]);
 
-  // FE11: after first response done, refresh the conversation title in the sidebar
-  const handleFirstDone = useCallback(
-    (_d: SseDoneData) => {
+  // FE11: the backend pushes a `title` event once the auto-generated title is
+  // persisted (after the first response). Refresh the list then so the sidebar
+  // reliably picks up the new name — refreshing on `done` would race the
+  // still-default title.
+  const handleTitle = useCallback(
+    (_d: SseTitleData) => {
       void conversations.refreshOne();
     },
     [conversations],
   );
+
+  // The model switcher targets the open conversation (if any); its model is the source of truth.
+  const activeConversation = conversations.items.find((c) => c.id === id);
 
   const authError = searchParams.get('auth_error');
 
@@ -194,7 +208,14 @@ export default function ChatView() {
     <AppShell
       user={user!}
       onSignOut={() => void signOut()}
-      topbar={<ModelSwitcher />}
+      topbar={
+        <ModelSwitcher
+          key={id ?? 'new'}
+          conversationId={id}
+          conversationModel={activeConversation?.model}
+          onModelChange={() => void conversations.refreshOne()}
+        />
+      }
       sidebar={
         <Sidebar
           conversations={conversations.items}
@@ -213,7 +234,7 @@ export default function ChatView() {
           Sign-in failed. Please try again.
         </div>
       )}
-      <AuthedChat conversationId={id} onFirstDone={handleFirstDone} />
+      <AuthedChat conversationId={id} onTitle={handleTitle} />
     </AppShell>
   );
 }
