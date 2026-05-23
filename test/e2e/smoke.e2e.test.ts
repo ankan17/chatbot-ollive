@@ -2,7 +2,7 @@
  * Automated cross-process E2E smoke test.
  *
  * Talks over HTTP to the running compose stack (published ports).
- * Does NOT import any app code directly.
+ * Does NOT import any app code directly at module eval time.
  *
  * SKIP GUARD: the suite is skipped when OLLIVE_E2E !== '1' so `pnpm test`
  * (unit suites) stays green without a running stack.
@@ -11,9 +11,6 @@
  * Run with compose: pnpm e2e:compose (builds stack, runs, tears down)
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createDb, inferenceLogs } from '@ollive/db';
-import { inferenceLogSchema } from '@ollive/shared';
-import { eq } from 'drizzle-orm';
 import {
   API_URL,
   WEB_URL,
@@ -25,45 +22,62 @@ import {
 
 const E2E = process.env.OLLIVE_E2E === '1';
 
-// ── All connections opened only inside describe.runIf — never at module eval ──
-let db: ReturnType<typeof createDb>;
+// These are only populated inside the guarded suite — never at module eval time
+// (which would fail when no stack is present, breaking the skip guard).
+let db: { select: Function; $client: { end: Function } };
+let inferenceLogs: unknown;
+let eq: Function;
+let inferenceLogSchema: { parse: Function };
 
 describe.runIf(E2E)('Ollive E2E smoke', () => {
-  beforeAll(() => {
-    // Open DB connection only when the suite actually runs
-    db = createDb(DB_URL);
+  beforeAll(async () => {
+    // Dynamically import workspace packages only when the suite actually runs.
+    // This prevents module-resolution failures when pnpm test runs without a stack.
+    const dbMod = await import('@ollive/db');
+    const sharedMod = await import('@ollive/shared');
+    const drizzleMod = await import('drizzle-orm');
+
+    db = dbMod.createDb(DB_URL);
+    inferenceLogs = dbMod.inferenceLogs;
+    eq = drizzleMod.eq;
+    inferenceLogSchema = sharedMod.inferenceLogSchema;
   });
 
   afterAll(async () => {
-    if (db) await db.$client.end({ timeout: 5 });
+    if (db) await (db as any).$client.end({ timeout: 5 });
   });
 
   // ── 1. Pipeline happy path (AC7/AC16) ─────────────────────────────────────
   describe('pipeline happy path', () => {
-    const requestId = crypto.randomUUID();
-    const now = new Date().toISOString();
+    let requestId: string;
+    let log: Record<string, unknown>;
 
-    const log = inferenceLogSchema.parse({
-      requestId,
-      timestamp: now,
-      provider: 'google',
-      model: 'gemini-2.5-flash',
-      status: 'success',
-      context: {},
-      timing: {
-        startedAt: now,
-        completedAt: now,
-        latencyMs: 420,
-        timeToFirstTokenMs: 120,
-      },
-      usage: {
-        promptTokens: 50,
-        completionTokens: 80,
-        totalTokens: 130,
-      },
-      preview: { input: 'E2E smoke test input', output: 'E2E smoke test output' },
-      error: null,
-      metadata: {},
+    beforeAll(() => {
+      requestId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      log = inferenceLogSchema.parse({
+        requestId,
+        timestamp: now,
+        provider: 'google',
+        model: 'gemini-2.5-flash',
+        status: 'success',
+        context: {},
+        timing: {
+          startedAt: now,
+          completedAt: now,
+          latencyMs: 420,
+          timeToFirstTokenMs: 120,
+        },
+        usage: {
+          promptTokens: 50,
+          completionTokens: 80,
+          totalTokens: 130,
+        },
+        preview: { input: 'E2E smoke test input', output: 'E2E smoke test output' },
+        error: null,
+        metadata: {},
+      });
     });
 
     it('POST /v1/logs → 202 accepted', async () => {
@@ -84,10 +98,13 @@ describe.runIf(E2E)('Ollive E2E smoke', () => {
 
     it('worker processes log → row appears in inference_logs', async () => {
       const row = await pollUntil(async () => {
-        const rows = await db
+        const rows = await (db as any)
           .select()
           .from(inferenceLogs)
-          .where(eq(inferenceLogs.requestId, requestId))
+          .where(eq(
+            (inferenceLogs as any).requestId,
+            requestId,
+          ))
           .limit(1);
         return rows[0] ?? null;
       }, { timeoutMs: 15_000, intervalMs: 500 });
@@ -120,22 +137,23 @@ describe.runIf(E2E)('Ollive E2E smoke', () => {
 
   // ── 2. Ingestion auth (AC9) ────────────────────────────────────────────────
   describe('ingestion auth', () => {
-    const validLog = inferenceLogSchema.parse({
-      requestId: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      provider: 'google',
-      model: 'gemini-2.5-flash',
-      status: 'success',
-      context: {},
-      timing: {
-        startedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-        latencyMs: 100,
-      },
-      usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-      preview: {},
-      error: null,
-      metadata: {},
+    let validLog: Record<string, unknown>;
+
+    beforeAll(() => {
+      const ts = new Date().toISOString();
+      validLog = inferenceLogSchema.parse({
+        requestId: crypto.randomUUID(),
+        timestamp: ts,
+        provider: 'google',
+        model: 'gemini-2.5-flash',
+        status: 'success',
+        context: {},
+        timing: { startedAt: ts, completedAt: ts, latencyMs: 100 },
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+        preview: {},
+        error: null,
+        metadata: {},
+      });
     });
 
     it('no Bearer → 401', async () => {
@@ -181,21 +199,25 @@ describe.runIf(E2E)('Ollive E2E smoke', () => {
 
   // ── 3. Idempotency (AC8) ───────────────────────────────────────────────────
   describe('idempotency', () => {
-    const idempotentId = crypto.randomUUID();
-    const ts = new Date().toISOString();
+    let idempotentId: string;
+    let idempotentLog: Record<string, unknown>;
 
-    const idempotentLog = inferenceLogSchema.parse({
-      requestId: idempotentId,
-      timestamp: ts,
-      provider: 'google',
-      model: 'gemini-2.5-flash',
-      status: 'success',
-      context: {},
-      timing: { startedAt: ts, completedAt: ts, latencyMs: 50 },
-      usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
-      preview: {},
-      error: null,
-      metadata: {},
+    beforeAll(() => {
+      idempotentId = crypto.randomUUID();
+      const ts = new Date().toISOString();
+      idempotentLog = inferenceLogSchema.parse({
+        requestId: idempotentId,
+        timestamp: ts,
+        provider: 'google',
+        model: 'gemini-2.5-flash',
+        status: 'success',
+        context: {},
+        timing: { startedAt: ts, completedAt: ts, latencyMs: 50 },
+        usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+        preview: {},
+        error: null,
+        metadata: {},
+      });
     });
 
     it('same requestId posted twice → both 202, exactly one row', async () => {
@@ -215,28 +237,27 @@ describe.runIf(E2E)('Ollive E2E smoke', () => {
 
       // Wait for worker to process
       await pollUntil(async () => {
-        const rows = await db
+        const rows = await (db as any)
           .select()
           .from(inferenceLogs)
-          .where(eq(inferenceLogs.requestId, idempotentId));
+          .where(eq((inferenceLogs as any).requestId, idempotentId));
         return rows.length === 1 ? rows : null;
       }, { timeoutMs: 15_000 });
 
-      const rows = await db
+      const rows = await (db as any)
         .select()
         .from(inferenceLogs)
-        .where(eq(inferenceLogs.requestId, idempotentId));
+        .where(eq((inferenceLogs as any).requestId, idempotentId));
       expect(rows).toHaveLength(1);
     });
   });
 
   // ── 4. Dev-mode auth (AC1 dev path) ───────────────────────────────────────
   describe('dev-mode auth', () => {
-    it('GET /v1/session → guest initially', async () => {
+    it('GET /v1/session → guest initially (no cookie)', async () => {
       const res = await fetch(`${API_URL}/v1/session`);
       expect(res.status).toBe(200);
       const body = await res.json() as { authenticated: boolean };
-      // A fresh fetch with no cookie is a guest session
       expect(typeof body.authenticated).toBe('boolean');
     });
 
