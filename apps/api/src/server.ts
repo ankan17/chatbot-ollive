@@ -4,6 +4,8 @@ import { createLogger } from './logger.js';
 import { createRedis } from './redis.js';
 import { createApp } from './app.js';
 import { createUserRepository } from './users/repository.js';
+import { withLoggingTransport, googleProviderFactory } from '@ollive/llm-sdk';
+import type { BufferedHttpTransport } from '@ollive/llm-sdk';
 import type { Server } from 'node:http';
 
 async function main(): Promise<void> {
@@ -27,13 +29,26 @@ async function main(): Promise<void> {
     }
   }
 
-  const app = createApp({ db, redis, config, logger });
+  // Plan 5: Instrument the chat provider with the logging transport so every inference
+  // call is buffered and forwarded to the local ingestion endpoint (POST /v1/logs).
+  const ingestionUrl = `http://localhost:${config.port}/v1/logs`;
+  const { provider: chatProvider, transport } = withLoggingTransport(
+    googleProviderFactory(),
+    {
+      ingestionUrl,
+      apiKey: config.ingestionApiKey,
+      redaction: config.piiRedaction,
+    },
+  );
+
+  const app = createApp({ db, redis, config, logger, chatProvider });
 
   const server: Server = app.listen(config.port, () => {
     logger.info({ port: config.port }, 'api listening');
   });
 
   let shuttingDown = false;
+  let transportRef: BufferedHttpTransport | null = transport;
 
   function shutdown(signal: string): void {
     if (shuttingDown) return;
@@ -49,6 +64,15 @@ async function main(): Promise<void> {
 
     server.close(async () => {
       try {
+        // Flush buffered inference logs before tearing down connections
+        if (transportRef) {
+          try {
+            await transportRef.close();
+          } catch (flushErr) {
+            logger.warn({ err: flushErr }, 'transport flush error during shutdown — continuing');
+          }
+          transportRef = null;
+        }
         redis.disconnect();
         await db.$client.end({ timeout: 5 });
         logger.info('shutdown complete');
