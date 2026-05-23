@@ -1,0 +1,20 @@
+.chatView {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.emptyCenter {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

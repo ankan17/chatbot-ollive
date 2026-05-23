@@ -1,0 +1,72 @@
+.bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 70%;
+  margin-bottom: var(--space-3);
+}
+
+.user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.content {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.user .content {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.assistant .content {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.assistant .content p {
+  margin: 0 0 var(--space-2);
+}
+
+.assistant .content p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant .content pre {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+}
+
+.assistant .content code {
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.statusTag {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+}
+
+.errorContent {
+  background: var(--color-error-light) !important;
+  color: var(--color-error) !important;
+  border-color: var(--color-error) !important;
+}
