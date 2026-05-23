@@ -24,6 +24,12 @@ async function main(): Promise<void> {
   // Ensure consumer group exists
   await ensureGroup(redis, logger);
 
+  // Write readiness file so the compose healthcheck can detect startup (DE4)
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile('/tmp/worker-ready', '').catch(() => {
+    // Non-fatal: healthcheck will retry; worker still runs
+  });
+
   const deps: ConsumerDeps = {
     redis,
     db,
@@ -114,7 +120,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
+   
   console.error('Fatal error:', err);
   process.exit(1);
 });
