@@ -11,19 +11,25 @@
 .message {
   font-size: var(--text-base);
   color: var(--color-error);
+  max-width: 28rem;
+  line-height: 1.5;
 }
 
 .retryBtn {
+  font-family: var(--font-body);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-on-accent);
   background-color: var(--color-accent);
   border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-4);
-  transition: background-color 0.15s ease;
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-5);
+  cursor: pointer;
+  box-shadow: 0 6px 18px -6px rgb(var(--accent-rgb) / 0.5);
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
 .retryBtn:hover {
   background-color: var(--color-accent-hover);
+  transform: translateY(-1px);
 }
