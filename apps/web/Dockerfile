@@ -25,7 +25,10 @@ ENV VITE_API_BASE_URL=
 RUN pnpm --filter @ollive/web build
 
 # ── runtime stage ─────────────────────────────────────────────────────────────
-FROM nginx:1.27-alpine
+# nginx:stable-alpine (vs 1.27-alpine): the 1.27-alpine arm64 image fails to exec
+# on some Docker Desktop hosts ("exec format error"); stable-alpine runs reliably
+# and still ships busybox wget for the compose healthcheck.
+FROM nginx:stable-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80

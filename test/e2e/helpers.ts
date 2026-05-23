@@ -1,7 +1,10 @@
 /**
  * E2E test helpers — black-box HTTP client utilities for the running compose stack.
  * Does NOT import any app code; talks only over HTTP and Postgres (read-only assertions).
+ * The Postgres assertion uses the raw `postgres` driver (not the @ollive/db workspace
+ * package) so the e2e vitest project resolves cleanly from the repo root.
  */
+import postgres from 'postgres';
 
 export const API_URL = process.env.OLLIVE_E2E_API_URL ?? 'http://localhost:4000';
 export const WEB_URL = process.env.OLLIVE_E2E_WEB_URL ?? 'http://localhost:8080';
@@ -11,6 +14,12 @@ export const DB_URL =
   'postgres://ollive:ollive@localhost:5432/ollive';
 export const INGESTION_API_KEY =
   process.env.INGESTION_API_KEY ?? 'dev-ingestion-key';
+
+/** A minimal Postgres client (raw driver) for read-only row assertions. */
+export type PgClient = ReturnType<typeof postgres>;
+export function createPgClient(): PgClient {
+  return postgres(DB_URL, { max: 1 });
+}
 
 /** Thin fetch wrapper that carries a session cookie across calls. */
 export class ApiClient {
