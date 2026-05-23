@@ -1,4 +1,5 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// Empty string means relative URLs (same-origin nginx proxy path); fall back to empty if unset
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export function buildUrl(
   path: string,
