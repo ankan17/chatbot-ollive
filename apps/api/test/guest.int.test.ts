@@ -206,6 +206,36 @@ describe('POST /v1/guest/messages — validation', () => {
   });
 });
 
+describe('POST /v1/guest/messages — cancel (Task 7)', () => {
+  it('AbortError mid-stream → stream closes cleanly; no error/done event; no DB rows added', async () => {
+    const chatProvider = new FakeChatProvider({
+      deltas: ['Hello', ' there'],
+      abortAfter: 0, // AbortError after 0th delta (before yielding any delta)
+    });
+    const app = createApp({ db, redis, config, chatProvider });
+
+    const msgsBefore = await db.select().from(messagesTable);
+    const convsBefore = await db.select().from(conversationsTable);
+
+    const res = await request(app)
+      .post('/v1/guest/messages')
+      .send({ messages: [], content: 'Hi' });
+
+    const events = parseSseEvents(res.text);
+    const eventNames = events.map((e) => e.event);
+
+    // No error or done event on cancel
+    expect(eventNames).not.toContain('error');
+    expect(eventNames).not.toContain('done');
+
+    // No persistence for guest
+    const msgsAfter = await db.select().from(messagesTable);
+    const convsAfter = await db.select().from(conversationsTable);
+    expect(msgsAfter.length).toBe(msgsBefore.length);
+    expect(convsAfter.length).toBe(convsBefore.length);
+  });
+});
+
 describe('POST /v1/guest/messages — guestSessionId on log context (IN8)', () => {
   it('callContext.metadata has guestSessionId; no conversationId/userId', async () => {
     const chatProvider = new FakeChatProvider({

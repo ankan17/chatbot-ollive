@@ -86,13 +86,13 @@ export function createApp(deps: AppDeps): express.Express {
   // 9. Conversations CRUD + import router (Plan 4): mounted at /v1
   app.use('/v1', conversationsRouter({ config, conversations: conversationRepo }));
 
-  // 10. Chat SSE endpoint (Plan 5): POST /v1/conversations/:id/messages
-  app.use('/v1/conversations', chatRouter({ db, config, chatProvider: deps.chatProvider, logger }));
+  // 10. Chat + Guest SSE endpoints (Plan 5): only mounted when a provider is present
+  if (deps.chatProvider) {
+    app.use('/v1/conversations', chatRouter({ db, config, chatProvider: deps.chatProvider, logger }));
+    app.use('/v1/guest', guestChatRouter({ redis, config, chatProvider: deps.chatProvider, logger }));
+  }
 
-  // 11. Guest chat endpoint (Plan 5): POST /v1/guest/messages
-  app.use('/v1/guest', guestChatRouter({ redis, config, chatProvider: deps.chatProvider, logger }));
-
-  // 12. Metrics endpoints (Plan 5): GET /v1/metrics/*
+  // 11. Metrics endpoints (Plan 5): GET /v1/metrics/* — no provider needed
   app.use('/v1/metrics', metricsRouter({ db, config, logger }));
 
   // 13. 404 fallback

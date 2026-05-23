@@ -73,9 +73,8 @@ export function mapProviderError(err: unknown): { code: SseErrorCode; message: s
     return { code: 'provider_error', message: 'The provider returned an error.' };
   }
 
-  // Default: treat as a provider_error if we have some indicator it's external,
-  // else internal_error
-  return { code: 'provider_error', message: 'The provider returned an error.' };
+  // Default: no provider indicators → internal_error (e.g. TypeError, DB error)
+  return { code: 'internal_error', message: 'An unexpected error occurred' };
 }
 
 /**

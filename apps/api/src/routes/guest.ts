@@ -16,7 +16,7 @@ const RESERVE = 1024;
 export interface GuestChatRouterDeps {
   redis: Redis;
   config: AppConfig;
-  chatProvider?: LLMProvider;
+  chatProvider: LLMProvider;
   logger?: Logger;
 }
 
@@ -32,10 +32,6 @@ export function guestChatRouter(deps: GuestChatRouterDeps): Router {
         return next(new AppError('validation_error', 'Invalid request body', parseResult.error.issues));
       }
       const body = parseResult.data;
-
-      if (!deps.chatProvider) {
-        return next(new AppError('internal_error', 'Chat provider not configured'));
-      }
 
       const guestId = req.guest!.id;
       const { allowed, remaining } = await checkAndIncrementGuest(

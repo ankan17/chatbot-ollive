@@ -18,7 +18,7 @@ const RESERVE = 1024;
 export interface ChatRouterDeps {
   db: Db;
   config: AppConfig;
-  chatProvider?: LLMProvider;
+  chatProvider: LLMProvider;
   logger?: Logger;
 }
 
@@ -34,10 +34,6 @@ export function chatRouter(deps: ChatRouterDeps): Router {
         return next(new AppError('validation_error', 'Invalid request body', parseResult.error.issues));
       }
       const body = parseResult.data;
-
-      if (!deps.chatProvider) {
-        return next(new AppError('internal_error', 'Chat provider not configured'));
-      }
 
       const userId = req.user!.id;
       const convId = req.params['id']!;
@@ -138,7 +134,7 @@ export function chatRouter(deps: ChatRouterDeps): Router {
             .set({ updatedAt: new Date() })
             .where(eq(conversations.id, conv.id));
           if (isFirstResponse) {
-            maybeAutoName({ db, provider: deps.chatProvider!, model: conv.model, logger: deps.logger }, conv.id);
+            maybeAutoName({ db, provider: deps.chatProvider, model: conv.model, logger: deps.logger }, conv.id);
           }
         },
         async onCancel({ content }) {

@@ -15,6 +15,30 @@ import { createUserRepository } from '../src/users/repository.js';
 import { createConversationRepository } from '../src/conversations/repository.js';
 import { signSession } from '../src/auth/jwt.js';
 import { FakeChatProvider } from './fakes.js';
+import type { LLMProvider, ChatRequest, StreamChunk, CallContext } from '@ollive/llm-sdk';
+
+/**
+ * TitleFailProvider: succeeds for normal chat calls but throws on title_generation calls.
+ * Used to test FR17 (title-gen failure leaves default title intact).
+ */
+class TitleFailProvider implements LLMProvider {
+  readonly name = 'title-fail-fake';
+
+  async *streamChat(
+    _req: ChatRequest,
+    opts?: { signal?: AbortSignal; context?: CallContext },
+  ): AsyncIterable<StreamChunk> {
+    if (opts?.context?.metadata?.['kind'] === 'title_generation') {
+      throw new Error('title generation service unavailable');
+    }
+    yield { delta: 'Hello' };
+    yield { delta: ' world' };
+    yield {
+      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      finishReason: 'stop',
+    };
+  }
+}
 
 const DATABASE_URL =
   process.env['DATABASE_URL'] ?? 'postgres://ollive:ollive@localhost:5432/ollive';
@@ -382,6 +406,43 @@ describe('POST /v1/conversations/:id/messages — auto-naming (BE12)', () => {
 
     expect(updatedConv.titleSource).toBe('auto');
     expect(updatedConv.title).not.toBe('New conversation');
+  });
+
+  it('title-gen throws → title stays "New conversation" and title_source stays "default" (FR17)', async () => {
+    const chatProvider = new TitleFailProvider();
+    const app = createApp({ db, redis, config, chatProvider });
+    const userRepo = createUserRepository(db);
+    const user = await userRepo.upsertByGoogleSub({ googleSub: 'chat-fr17-sub', email: 'chat-fr17@test.com' });
+    const cookie = await sessionCookieFor(user.id, user.email);
+    const convRepo = createConversationRepository(db);
+    const conv = await convRepo.create({ userId: user.id, provider: 'google', model: config.defaultModel });
+
+    // Confirm initial state
+    const initialConv = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
+    expect(initialConv[0]!.titleSource).toBe('default');
+    expect(initialConv[0]!.title).toBe('New conversation');
+
+    const res = await request(app)
+      .post(`/v1/conversations/${conv.id}/messages`)
+      .set('Cookie', cookie)
+      .send({ content: 'What is 42?' });
+
+    // Main stream succeeded
+    const events = parseSseEvents(res.text);
+    const eventNames = events.map((e) => e.event);
+    expect(eventNames).toContain('done');
+    expect(eventNames).not.toContain('error');
+
+    // Poll up to ~1s waiting for the detached title-gen work to complete (or fail silently)
+    const deadline = Date.now() + 1000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
+    // FR17: title-gen failure left default intact
+    const rows = await db.select().from(conversationsTable).where(eq(conversationsTable.id, conv.id)).limit(1);
+    expect(rows[0]!.title).toBe('New conversation');
+    expect(rows[0]!.titleSource).toBe('default');
   });
 
   it('title_source=user conversation is left unchanged after first response', async () => {
