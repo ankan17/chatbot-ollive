@@ -10,4 +10,5 @@ export default defineWorkspace([
       fileParallelism: false,
     },
   },
+  { test: { name: 'llm-sdk', root: './packages/llm-sdk' } },
 ]);
