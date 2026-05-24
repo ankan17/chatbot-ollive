@@ -132,6 +132,40 @@ describe('GoogleProvider', () => {
     expect(callArg.messages).toBe(messages);
   });
 
+  it('throws the underlying provider error (carrying HTTP status), not the bare NoOutputGeneratedError', async () => {
+    // Reproduces ai@5 behavior on a failed generation (e.g. 429): the real error is
+    // delivered via onError, the textStream ends with no output, and usage/finishReason
+    // reject with a context-free NoOutputGeneratedError that lacks the status code.
+    const realError = Object.assign(new Error('You exceeded your current quota'), {
+      statusCode: 429,
+    });
+    const noOutput = new Error('No output generated. Check the stream for errors.');
+
+    streamTextSpy.mockImplementation((opts: { onError?: (e: { error: unknown }) => void }) => {
+      opts.onError?.({ error: realError });
+      async function* emptyStream(): AsyncGenerator<string> {
+        // no deltas
+      }
+      return {
+        textStream: emptyStream(),
+        usage: Promise.reject(noOutput),
+        finishReason: Promise.reject(noOutput),
+      };
+    });
+
+    const provider = new GoogleProvider();
+    await expect(
+      (async () => {
+        for await (const _ of provider.streamChat({
+          model: 'gemini-2.5-flash',
+          messages: [{ role: 'user', content: 'hi' }],
+        })) {
+          // drain
+        }
+      })(),
+    ).rejects.toBe(realError);
+  });
+
   it('normalizes usage defensively when inputTokens is undefined', async () => {
     streamTextSpy.mockReturnValue(
       fakeStreamResult({

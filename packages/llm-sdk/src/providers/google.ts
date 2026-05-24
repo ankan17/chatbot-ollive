@@ -56,25 +56,39 @@ export class GoogleProvider implements LLMProvider {
     req: ChatRequest,
     opts?: { signal?: AbortSignal; context?: CallContext },
   ): AsyncIterable<StreamChunk> {
+    // ai@5 surfaces the real provider error (e.g. an APICallError carrying the HTTP
+    // status) via onError, while the stream's own promises reject with a context-free
+    // NoOutputGeneratedError. Capture it so we can re-throw the real cause below —
+    // otherwise downstream error classification can't see the status code.
+    let capturedError: unknown;
     const result = streamText({
       model: googleAI(req.model),
       messages: req.messages,
       abortSignal: opts?.signal,
       temperature: req.temperature,
       maxOutputTokens: req.maxOutputTokens,
+      onError: ({ error }) => {
+        capturedError = error;
+      },
     });
 
-    // Yield delta chunks immediately — zero added latency (SDK10/NFR1)
-    for await (const delta of result.textStream) {
-      yield { delta };
-    }
+    try {
+      // Yield delta chunks immediately — zero added latency (SDK10/NFR1)
+      for await (const delta of result.textStream) {
+        yield { delta };
+      }
 
-    // After stream ends, emit the final usage+finishReason chunk
-    const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
-    yield {
-      usage: normalizeUsage(usage),
-      finishReason: normalizeFinishReason(finishReason),
-    };
+      // After stream ends, emit the final usage+finishReason chunk
+      const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
+      yield {
+        usage: normalizeUsage(usage),
+        finishReason: normalizeFinishReason(finishReason),
+      };
+    } catch (err) {
+      // Prefer the real provider error captured via onError over the SDK's
+      // context-free NoOutputGeneratedError.
+      throw capturedError ?? err;
+    }
   }
 }
 
