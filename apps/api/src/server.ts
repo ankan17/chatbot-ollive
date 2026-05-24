@@ -4,8 +4,8 @@ import { createLogger } from './logger.js';
 import { createRedis } from './redis.js';
 import { createApp } from './app.js';
 import { createUserRepository } from './users/repository.js';
-import { withLoggingTransport, googleProviderFactory } from '@ollive/llm-sdk';
-import type { BufferedHttpTransport } from '@ollive/llm-sdk';
+import { BufferedHttpTransport } from '@ollive/llm-sdk';
+import { buildChatProvider } from './chat/provider.js';
 import type { Server } from 'node:http';
 
 async function main(): Promise<void> {
@@ -29,17 +29,15 @@ async function main(): Promise<void> {
     }
   }
 
-  // Plan 5: Instrument the chat provider with the logging transport so every inference
-  // call is buffered and forwarded to the local ingestion endpoint (POST /v1/logs).
+  // Plan 5 / Task 9: Build the routed chat provider (Google + optional Anthropic) with
+  // a shared logging transport that buffers and forwards every inference call to the
+  // local ingestion endpoint (POST /v1/logs).
   const ingestionUrl = `http://localhost:${config.port}/v1/logs`;
-  const { provider: chatProvider, transport } = withLoggingTransport(
-    googleProviderFactory(),
-    {
-      ingestionUrl,
-      apiKey: config.ingestionApiKey,
-      redaction: config.piiRedaction,
-    },
-  );
+  const transport = new BufferedHttpTransport({
+    ingestionUrl,
+    apiKey: config.ingestionApiKey,
+  });
+  const chatProvider = buildChatProvider(config, transport);
 
   const app = createApp({ db, redis, config, logger, chatProvider });
 

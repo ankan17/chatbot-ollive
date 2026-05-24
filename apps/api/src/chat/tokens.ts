@@ -52,7 +52,7 @@ export function buildContext(
   const usable: ChatMessage[] = [];
   for (const m of nonEmpty) {
     const last = usable[usable.length - 1];
-    if (last && last.role === m.role) {
+    if (last?.role === m.role) {
       usable[usable.length - 1] = { ...last, content: `${last.content}\n\n${m.content}` };
     } else {
       usable.push(m);
