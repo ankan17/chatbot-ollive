@@ -147,10 +147,10 @@ export function chatRouter(deps: ChatRouterDeps): Router {
             .set({ content, status: 'partial' })
             .where(eq(messages.id, asstMsgId));
         },
-        async onError({ content }) {
+        async onError({ content, message }) {
           await db
             .update(messages)
-            .set({ content, status: 'error' })
+            .set({ content, status: 'error', errorMessage: message })
             .where(eq(messages.id, asstMsgId));
         },
       });

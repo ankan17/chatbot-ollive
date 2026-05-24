@@ -122,7 +122,7 @@ describe('chatReducer', () => {
     expect(state.error).toEqual(errorData);
     const assistant = state.messages.find((m) => m.id === 'msg-1')!;
     expect(assistant.status).toBe('error');
-    expect(assistant.errorReason).toBe('oops');
+    expect(assistant.errorMessage).toBe('oops');
   });
 
   it("keeps a failed message's error reason after the next send", () => {
@@ -147,7 +147,7 @@ describe('chatReducer', () => {
     // ...but the failed message still carries its own reason (no fallback flip).
     const failed = state.messages.find((m) => m.id === 'msg-1')!;
     expect(failed.status).toBe('error');
-    expect(failed.errorReason).toBe('An unexpected error occurred');
+    expect(failed.errorMessage).toBe('An unexpected error occurred');
   });
 
   it('cancelled keeps partial content + status partial + phase cancelled', () => {

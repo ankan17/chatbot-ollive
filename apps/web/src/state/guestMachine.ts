@@ -109,7 +109,7 @@ export function guestReducer(state: GuestState, action: GuestAction): GuestState
           ...state.conversation,
           messages: state.conversation.messages.map((m) =>
             m.id === state.currentAssistantId
-              ? { ...m, status: 'error', errorReason: action.message }
+              ? { ...m, status: 'error', errorMessage: action.message }
               : m,
           ),
         },

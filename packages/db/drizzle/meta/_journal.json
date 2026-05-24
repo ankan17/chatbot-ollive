@@ -15,6 +15,13 @@
       "when": 1779537386549,
       "tag": "0001_abandoned_ser_duncan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779597300984,
+      "tag": "0002_rainy_lady_ursula",
+      "breakpoints": true
     }
   ]
 }

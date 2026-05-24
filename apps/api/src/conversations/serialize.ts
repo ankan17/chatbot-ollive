@@ -27,6 +27,7 @@ export interface MessageRow {
   tokenCount: number | null;
   sequence: number;
   status: string;
+  errorMessage: string | null;
   createdAt: Date;
 }
 
@@ -70,6 +71,10 @@ export function toMessage(row: MessageRow): Message {
   // tokenCount omitted when null — distinct from 0
   if (row.tokenCount != null) {
     msg.tokenCount = row.tokenCount;
+  }
+  // errorMessage only present on failed turns
+  if (row.errorMessage != null) {
+    msg.errorMessage = row.errorMessage;
   }
   return msg;
 }

@@ -63,6 +63,9 @@ export const messages = pgTable(
     tokenCount: integer('token_count'),
     sequence: integer('sequence').notNull(),
     status: text('status').notNull().default('complete'),
+    // User-facing reason persisted for failed turns (status='error') so a reload shows
+    // the same message the user saw live. Null for non-error messages.
+    errorMessage: text('error_message'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

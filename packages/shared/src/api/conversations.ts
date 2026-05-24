@@ -26,6 +26,7 @@ export interface Message {
   tokenCount?: number;                       // omitted when unknown / for user messages
   status: 'complete' | 'partial' | 'error';
   sequence: number;
+  errorMessage?: string;                     // user-facing reason; present only on failed turns
   createdAt: ISOString;
 }
 

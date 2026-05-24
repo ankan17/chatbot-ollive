@@ -54,7 +54,7 @@ export default function MessageBubble({
         )}
         {isError && (
           <div className={`${styles.content} ${styles.errorContent}`}>
-            {message.errorReason ?? 'Something went wrong. Please try again.'}
+            {message.errorMessage ?? 'Something went wrong. Please try again.'}
           </div>
         )}
         {showStopped && <span className={styles.statusTag}>Stopped</span>}

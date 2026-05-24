@@ -43,7 +43,7 @@ describe('MessageBubble', () => {
       role: 'assistant',
       content: '',
       status: 'error',
-      errorReason: 'Rate limit reached. Please try again shortly.',
+      errorMessage: 'Rate limit reached. Please try again shortly.',
     });
     render(<MessageBubble message={msg} />);
     expect(
