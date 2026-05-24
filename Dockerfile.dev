@@ -1,0 +1,32 @@
+# Shared dev image for the Node services (api, ingestion-worker).
+#
+# Unlike the per-app production Dockerfiles, this image installs the workspace
+# dependencies but does NOT copy source or build. At runtime the repo is bind-mounted
+# and the service runs via `tsx --watch` (see infra/docker-compose.dev.yml), so editing
+# code hot-reloads the container — no image rebuild needed for testing.
+#
+# node_modules are kept in volumes (declared in the compose file) so they survive
+# container recreation and aren't shadowed by the host's (wrong-platform) install.
+#
+# Rebuild this image only when dependencies change (pnpm-lock.yaml).
+FROM node:20-bookworm-slim
+ENV PNPM_HOME=/pnpm CI=true
+# Match the lockfile version (lockfileVersion: '9.0' → pnpm 10.x; pin to the workspace version)
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /app
+
+# Manifests only — the install layer is the whole point of this image; source arrives
+# via a bind mount and node_modules via volumes at runtime.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/shared/package.json    packages/shared/package.json
+COPY packages/db/package.json        packages/db/package.json
+COPY packages/llm-sdk/package.json   packages/llm-sdk/package.json
+COPY apps/api/package.json           apps/api/package.json
+COPY apps/ingestion-worker/package.json apps/ingestion-worker/package.json
+COPY apps/web/package.json           apps/web/package.json
+
+RUN pnpm install --frozen-lockfile
+
+# Default command; each service overrides this with its own `dev` script in compose.
+CMD ["pnpm", "--filter", "@ollive/api", "dev"]

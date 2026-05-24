@@ -1,0 +1,45 @@
+# Dev override: hot-reload the Node services without rebuilding images.
+#
+# api + ingestion-worker build from the shared ../Dockerfile.dev (install-only),
+# bind-mount the repo for live source, and run `tsx --watch` so editing code restarts
+# the service in place. node_modules paths are mounted as volumes so the container keeps
+# its own (linux) dependency tree instead of the host's bind-mounted one.
+#
+# Usage (include the base file, the Zscaler override, and this one):
+#   docker compose \
+#     -f infra/docker-compose.yml \
+#     -f infra/docker-compose.override.yml \
+#     -f infra/docker-compose.dev.yml \
+#     up -d
+#
+# Rebuild the dev image only when dependencies change (pnpm-lock.yaml):
+#   ... up -d --build
+#
+# Web already hot-reloads via the host-run vite dev server, so it is not included here.
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter @ollive/api dev
+    volumes:
+      - ../:/app
+      # Keep the image's installed deps; never use the host's bind-mounted node_modules.
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - /app/packages/db/node_modules
+      - /app/packages/shared/node_modules
+      - /app/packages/llm-sdk/node_modules
+
+  ingestion-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter @ollive/ingestion-worker dev
+    volumes:
+      - ../:/app
+      - /app/node_modules
+      - /app/apps/ingestion-worker/node_modules
+      - /app/packages/db/node_modules
+      - /app/packages/shared/node_modules
+      - /app/packages/llm-sdk/node_modules
