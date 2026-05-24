@@ -32,50 +32,97 @@ export interface RunChatArgs {
 }
 
 /**
+ * Walk the error chain. The AI SDK retries failures and rethrows a `RetryError`
+ * that wraps the real cause in `.lastError`; other layers use `.cause`. We must
+ * inspect the whole chain, not just the outermost error.
+ */
+function errorChain(err: Error): Error[] {
+  const chain: Error[] = [];
+  const seen = new Set<unknown>();
+  let cur: unknown = err;
+  while (cur instanceof Error && !seen.has(cur)) {
+    seen.add(cur);
+    chain.push(cur);
+    cur = (cur as { lastError?: unknown }).lastError ?? (cur as { cause?: unknown }).cause;
+  }
+  return chain;
+}
+
+/** Authoritative HTTP status from an AI SDK `APICallError` (or a nested body code). */
+function httpStatusOf(err: Error): number | undefined {
+  const e = err as { statusCode?: unknown; status?: unknown; data?: { error?: { code?: unknown } } };
+  for (const c of [e.statusCode, e.status, e.data?.error?.code]) {
+    if (typeof c === 'number') return c;
+  }
+  return undefined;
+}
+
+/** Provider status string (e.g. Gemini's `RESOURCE_EXHAUSTED`) from the response body. */
+function providerStatusOf(err: Error): string {
+  const s = (err as { data?: { error?: { status?: unknown } } }).data?.error?.status;
+  return typeof s === 'string' ? s : '';
+}
+
+/**
  * Map a provider-thrown error to the SSE error catalog (contract §7).
  *
- * - 429 / "rate limit" / "resource exhausted" → rate_limited
- * - timeout / deadline / ETIMEDOUT            → provider_timeout
- * - other provider error                       → provider_error
- * - non-provider / internal failure            → internal_error
+ * Prefers the authoritative HTTP status code (the AI SDK's `APICallError.statusCode`,
+ * which survives even when the error body can't be parsed into a keyword-bearing
+ * message) and unwraps the `RetryError` the SDK throws after retrying. Falls back to
+ * string matching for providers/transports that only surface a message.
+ *
+ * - 429 / "rate limit" / "quota" / RESOURCE_EXHAUSTED → rate_limited
+ * - 408 / 504 / "timeout" / "deadline"                → provider_timeout
+ * - any other provider HTTP status / provider error   → provider_error
+ * - non-provider / internal failure                   → internal_error
  */
 export function mapProviderError(err: unknown): { code: SseErrorCode; message: string } {
   if (!(err instanceof Error)) {
     return { code: 'internal_error', message: 'An unexpected error occurred' };
   }
 
-  const msg = err.message.toLowerCase();
-  const name = err.name.toLowerCase();
+  const chain = errorChain(err);
+  const status = chain.map(httpStatusOf).find((s) => s !== undefined);
+  // All messages + names + provider statuses across the chain, lowercased.
+  const text = chain
+    .map((e) => `${e.message} ${e.name} ${providerStatusOf(e)}`)
+    .join(' ')
+    .toLowerCase();
 
-  // Rate limit
+  // Rate limit — authoritative 429, or any rate/quota indicator in the chain.
   if (
-    msg.includes('429') ||
-    msg.includes('rate limit') ||
-    msg.includes('rate_limit') ||
-    msg.includes('resource exhausted') ||
-    msg.includes('quota') ||
-    name.includes('ratelimit')
+    status === 429 ||
+    text.includes('429') ||
+    text.includes('rate limit') ||
+    text.includes('rate_limit') ||
+    text.includes('ratelimit') ||
+    text.includes('too many requests') ||
+    text.includes('resource exhausted') ||
+    text.includes('resource_exhausted') ||
+    text.includes('quota')
   ) {
     return { code: 'rate_limited', message: 'Rate limit reached. Please try again shortly.' };
   }
 
   // Timeout
   if (
-    msg.includes('timeout') ||
-    msg.includes('etimedout') ||
-    msg.includes('deadline') ||
-    name.includes('timeout')
+    status === 408 ||
+    status === 504 ||
+    text.includes('timeout') ||
+    text.includes('etimedout') ||
+    text.includes('deadline')
   ) {
     return { code: 'provider_timeout', message: 'The provider took too long to respond.' };
   }
 
-  // Anything else from a provider-shaped error (has a name suggesting provider)
+  // Any provider HTTP status (even unparsed) or provider-shaped error.
   if (
-    name.includes('provider') ||
-    msg.includes('provider') ||
-    msg.includes('api error') ||
-    msg.includes('model error') ||
-    msg.includes('generation failed')
+    status !== undefined ||
+    text.includes('provider') ||
+    text.includes('apicallerror') ||
+    text.includes('api error') ||
+    text.includes('model error') ||
+    text.includes('generation failed')
   ) {
     return { code: 'provider_error', message: 'The provider returned an error.' };
   }
