@@ -69,8 +69,9 @@
   height: 6px;
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  box-shadow: 0 0 8px 1px rgb(var(--accent-rgb) / 70%);
+  box-shadow: 0 0 6px 1px rgb(var(--accent-rgb) / 70%);
   flex-shrink: 0;
+  margin-left: 6px;
 }
 
 .time {
