@@ -35,23 +35,3 @@
   background: var(--color-accent);
   color: var(--color-text-on-accent);
 }
-
-.textInput {
-  font-family: var(--font-body);
-  font-size: var(--text-sm);
-  padding: 8px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  min-width: 140px;
-}
-
-.textInput::placeholder {
-  color: var(--color-text-subtle);
-}
-
-.textInput:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}

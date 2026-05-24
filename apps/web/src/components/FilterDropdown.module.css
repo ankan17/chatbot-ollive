@@ -1,0 +1,107 @@
+.wrap {
+  position: relative;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 158px; /* gives the caret room to sit at the end */
+  padding: 7px 14px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.pill:hover {
+  border-color: var(--border-strong);
+  color: var(--color-text-primary);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent);
+  flex-shrink: 0;
+}
+
+.value {
+  white-space: nowrap;
+}
+
+.chevron {
+  margin-left: auto; /* pins the caret to the pill's right edge */
+  display: inline-flex;
+  color: var(--color-text-muted);
+}
+
+.chevron svg {
+  width: 13px;
+  height: 13px;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 21;
+  min-width: 100%;
+  width: max-content;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(12px);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+
+.option:hover {
+  background: var(--color-bg-surface);
+}
+
+.optLabel {
+  font-weight: 500;
+}
+
+.optCheck {
+  display: inline-flex;
+  color: var(--color-accent);
+}
+
+.optCheck svg {
+  width: 15px;
+  height: 15px;
+}

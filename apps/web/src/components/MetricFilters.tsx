@@ -1,5 +1,7 @@
 import React from 'react';
 import type { RangePreset } from '../lib/time.js';
+import { useModels } from '../hooks/useModels.js';
+import FilterDropdown from './FilterDropdown.js';
 import styles from './MetricFilters.module.css';
 
 const PRESETS: RangePreset[] = ['1h', '6h', '24h', '7d'];
@@ -21,6 +23,20 @@ export default function MetricFilters({
   onProvider,
   onModel,
 }: MetricFiltersProps) {
+  const { models } = useModels();
+
+  const providers = Array.from(new Set(models.map((m) => m.provider)));
+  // When a provider is selected, only its models are offered.
+  const modelOptions = provider ? models.filter((m) => m.provider === provider) : models;
+
+  function handleProvider(next: string | undefined) {
+    onProvider(next);
+    // Clear the model filter if the current model isn't served by the new provider.
+    if (model && next && !models.some((m) => m.id === model && m.provider === next)) {
+      onModel(undefined);
+    }
+  }
+
   return (
     <div className={styles.filters}>
       <div className={styles.presets}>
@@ -35,19 +51,19 @@ export default function MetricFilters({
           </button>
         ))}
       </div>
-      <input
-        type="text"
-        className={styles.textInput}
-        placeholder="Provider (optional)"
-        value={provider ?? ''}
-        onChange={(e) => onProvider(e.target.value || undefined)}
+      <FilterDropdown
+        label="Provider"
+        allLabel="All providers"
+        value={provider}
+        options={providers.map((p) => ({ value: p, label: p }))}
+        onChange={handleProvider}
       />
-      <input
-        type="text"
-        className={styles.textInput}
-        placeholder="Model (optional)"
-        value={model ?? ''}
-        onChange={(e) => onModel(e.target.value || undefined)}
+      <FilterDropdown
+        label="Model"
+        allLabel="All models"
+        value={model}
+        options={modelOptions.map((m) => ({ value: m.id, label: m.label }))}
+        onChange={onModel}
       />
     </div>
   );
