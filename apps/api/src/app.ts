@@ -85,7 +85,7 @@ export function createApp(deps: AppDeps): express.Express {
   app.use(authRouter({ config, redis, users, authProvider }));
 
   // 9. Conversations CRUD + import router (Plan 4): mounted at /v1
-  app.use('/v1', conversationsRouter({ config, conversations: conversationRepo }));
+  app.use('/v1', conversationsRouter({ config, conversations: conversationRepo, db, chatProvider: deps.chatProvider, logger }));
 
   // 9b. Available models (for the model switcher)
   app.use('/v1', modelsRouter({ config }));

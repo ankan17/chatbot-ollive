@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
 import { createUserRepository } from '../src/users/repository.js';
 import { signSession } from '../src/auth/jwt.js';
+import { FakeChatProvider } from './fakes.js';
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgres://ollive:ollive@localhost:5432/ollive';
@@ -348,5 +349,35 @@ describe('POST /v1/conversations/import', () => {
     expect(res1.status).toBe(201);
     expect(res2.status).toBe(201);
     expect(res1.body.id).not.toBe(res2.body.id); // Different users → different conversations
+  });
+});
+
+// PRD §7.1: "Because title_source='default', auto-naming runs against the imported exchange."
+describe('POST /v1/conversations/import — auto-naming', () => {
+  it('auto-names the imported conversation from its first exchange', async () => {
+    const provider = new FakeChatProvider({ deltas: ['Capital', ' of', ' France'], finishReason: 'stop' });
+    const namingApp = createApp({ db, redis, config, chatProvider: provider });
+
+    const userRepo = createUserRepository(db);
+    const user = await userRepo.upsertByGoogleSub({ googleSub: 'import-naming', email: 'import-naming@test.com' });
+    const cookie = await sessionCookieFor(user.id, user.email);
+
+    const res = await request(namingApp)
+      .post('/v1/conversations/import')
+      .set('Cookie', cookie)
+      .send({
+        messages: [
+          { role: 'user', content: 'What is the capital of France?' },
+          { role: 'assistant', content: 'The capital of France is Paris.' },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    const [row] = await db
+      .select({ title: conversationsTable.title, titleSource: conversationsTable.titleSource })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, res.body.id));
+    expect(row.titleSource).toBe('auto');
+    expect(row.title).toBe('Capital of France');
   });
 });

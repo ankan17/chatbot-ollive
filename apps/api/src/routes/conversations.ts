@@ -1,10 +1,14 @@
 import { Router } from 'express';
+import type { Db } from '@ollive/db';
+import type { LLMProvider } from '@ollive/llm-sdk';
 import type { AppConfig } from '../config.js';
+import type { Logger } from '../logger.js';
 import type { ConversationRepository } from '../conversations/repository.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { AppError } from '../errors.js';
 import { availableModelIds, providerForModel } from '../models/catalog.js';
+import { generateAndPersistTitle } from '../chat/naming.js';
 import {
   listConversationsQuerySchema,
   createConversationSchema,
@@ -15,10 +19,14 @@ import {
 export interface ConversationsRouterDeps {
   config: AppConfig;
   conversations: ConversationRepository;
+  db: Db;
+  /** When present, an imported conversation is auto-named from its first exchange (PRD §7.1). */
+  chatProvider?: LLMProvider;
+  logger?: Logger;
 }
 
 export function conversationsRouter(deps: ConversationsRouterDeps): Router {
-  const { config, conversations } = deps;
+  const { config, conversations, db, chatProvider, logger } = deps;
   const router = Router();
   const auth = requireAuth({ config });
 
@@ -39,6 +47,17 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
         provider: providerForModel(config.defaultModel, config) ?? 'google',
         model: config.defaultModel,
       });
+
+      // Auto-name the imported conversation from its first exchange (PRD §7.1).
+      // Awaited so the title is persisted before the client fetches the conversation;
+      // generateAndPersistTitle swallows its own errors and leaves the default title.
+      if (chatProvider) {
+        const title = await generateAndPersistTitle(
+          { db, provider: chatProvider, model: config.defaultModel, logger },
+          detail.id,
+        );
+        if (title) detail.title = title;
+      }
 
       return res.status(201).json(detail);
     } catch (err) {
