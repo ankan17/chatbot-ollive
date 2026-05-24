@@ -196,17 +196,16 @@ Full list with reasoning: [`docs/PRD.md` §23](docs/PRD.md).
 
 ---
 
-## 5. What I'd improve with more time
+## 5. Future Improvements
 
-- **Compiled build artifact.** Replace the runtime `tsx` with a `tsc`/`esbuild` build stage and ship compiled JS for faster, leaner, production-grade containers.
+- **Code Quality.** The current code is fully AI-generated with very minimal human ontervention. On a production codebase, I'd spend more time to read what I'm shipping and there'd be obvious areas of improvement which I'd have missed in a day. This is where I'd start.
 - **Resumable streams.** Today a dropped connection ends generation and the user resends. A resumable SSE design (server-buffered partial + replay token) would survive flaky networks.
 - **Distributed rate limiting.** The current limiter is in-memory per-instance; move to a Redis-backed limiter so limits hold across horizontally scaled API replicas.
 - **Dashboard scale-out.** Move from on-demand SQL aggregation to time-based partitioning of `inference_logs` + continuous aggregates / pre-computed rollups (or a TSDB) as log volume grows.
 - **Kafka migration for the event bus** if sustained throughput demands it — the broker-agnostic ingestion boundary is already designed for this swap.
 - **Harden the guest abuse story.** The per-cookie cap is resettable by clearing cookies (acceptable for a friction-reducing trial, not a paywall); device fingerprinting or stronger IP heuristics would tighten it.
-- **Distributed tracing.** OpenTelemetry spans across `web → api → worker` keyed on the existing correlation id, complementing the metrics dashboards.
-- **Session revocation.** A short server-side denylist (or rotating refresh tokens) to compensate for stateless JWTs being non-revocable mid-expiry.
 - **Deployment beyond Compose.** Kubernetes manifests / IaC; today the Compose file is the deployment artifact.
+- **Other features I have in mind.** Editing messages and Conversation branching; Cached conversations for viewing recent chats offline; RAG integration if it has to be made domain-specific.
 
 ---
 
