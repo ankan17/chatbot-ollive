@@ -23,6 +23,7 @@ const envSchema = z.object({
   // GEMINI_API_KEY is required at startup even though tests supply a dummy value + inject a fake
   // provider — the production wiring reads it to construct googleProviderFactory().
   GEMINI_API_KEY: z.string().min(1),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
   CONTEXT_TOKEN_BUDGET: z.coerce.number().int().positive().default(4000),
   PII_REDACTION: z.enum(['off', 'pattern', 'llm']).default('pattern'),
   // Environment
@@ -47,6 +48,8 @@ export interface AppConfig {
   defaultModel: string;
   /** GEMINI_API_KEY — required at startup; production wiring reads it to construct googleProviderFactory(). Tests supply a dummy + inject a fake provider. */
   geminiApiKey: string;
+  /** ANTHROPIC_API_KEY — optional; when set, gates Anthropic provider availability. Google-only setups may omit this. */
+  anthropicApiKey?: string;
   /** CONTEXT_TOKEN_BUDGET — max prompt tokens for the context window (A3/BE5); default 4000. */
   contextTokenBudget: number;
   /** PII_REDACTION — SDK redaction strategy; default 'pattern'. */
@@ -96,6 +99,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     guestSessionTtl: data.GUEST_SESSION_TTL,
     defaultModel: data.DEFAULT_MODEL,
     geminiApiKey: data.GEMINI_API_KEY,
+    anthropicApiKey: data.ANTHROPIC_API_KEY,
     contextTokenBudget: data.CONTEXT_TOKEN_BUDGET,
     piiRedaction: data.PII_REDACTION,
     nodeEnv: data.NODE_ENV,
