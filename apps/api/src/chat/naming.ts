@@ -25,7 +25,8 @@ function stripMarkdown(s: string): string {
 
 /**
  * Clean a raw model-generated title:
- * - Trim whitespace
+ * - Keep only the first non-empty line (a title is single-line; if the model
+ *   emits multi-line content/markdown, later lines are not part of the title)
  * - Strip markdown formatting (bold/italic/code/headings/links)
  * - Strip surrounding single/double quotes
  * - Strip a trailing period
@@ -36,7 +37,9 @@ function stripMarkdown(s: string): string {
  * Pure function.
  */
 export function cleanTitle(raw: string, maxWords = 6): string {
-  let s = raw.trim();
+  // A title is a single line. If the model returned multi-line output (e.g. a
+  // markdown/code continuation rather than a title), keep only the first real line.
+  let s = raw.split('\n').map((line) => line.trim()).find((line) => line.length > 0) ?? '';
   // Strip markdown formatting (before quote/period stripping so combined cases resolve)
   s = stripMarkdown(s);
   // Strip surrounding quotes (single or double)
@@ -64,17 +67,26 @@ export async function generateTitle(
   const userInput = firstUserText.slice(0, MAX_INPUT_CHARS);
   const assistantOutput = firstAssistantText.slice(0, MAX_INPUT_CHARS);
 
+  // The conversation excerpt below is reference material to summarize. It is
+  // wrapped in a delimiter and the instruction is forceful because the excerpt's
+  // assistant turn may be truncated mid-sentence — without this, the model tends
+  // to *continue* the answer (e.g. emitting more markdown/code) instead of
+  // titling it. (See the "ned behavior! } ### Rust rust" incident.)
   const chatRequest = {
     model,
     messages: [
       {
         role: 'system' as const,
         content:
-          'Generate a concise title of at most 6 words; plain text only, no markdown, no quotes, no punctuation',
+          'You write a short title for a conversation. Output ONLY the title and nothing else: ' +
+          'at most 6 words, a single line, plain text, no markdown, no quotes, no punctuation. ' +
+          'Summarize the topic — never answer, continue, or complete the conversation.',
       },
       {
         role: 'user' as const,
-        content: `User: ${userInput}\nAssistant: ${assistantOutput}`,
+        content:
+          'Write a title summarizing the topic of this conversation:\n\n' +
+          `<conversation>\nUser: ${userInput}\nAssistant: ${assistantOutput}\n</conversation>`,
       },
     ],
   };

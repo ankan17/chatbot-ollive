@@ -79,6 +79,20 @@ describe('cleanTitle', () => {
   it('preserves snake_case identifiers (underscores are not emphasis)', () => {
     expect(cleanTitle('Refactor user_service module')).toBe('Refactor user_service module');
   });
+
+  it('uses only the first non-empty line of multi-line output', () => {
+    expect(cleanTitle('Rust vs C++\n## Overview\n```rust\ncode\n```')).toBe('Rust vs C++');
+  });
+
+  it('drops trailing markdown/code lines (model continuation regression)', () => {
+    // Reproduces the "ned behavior! } ### Rust rust" incident: the model returned a
+    // content continuation across many lines; only the first line should survive.
+    expect(cleanTitle('ned behavior!\n}\n```\n### Rust\n```rust\nfn x() {}')).toBe('ned behavior!');
+  });
+
+  it('skips leading blank lines to the first real line', () => {
+    expect(cleanTitle('\n\n  Trip to Kyoto  \n## details')).toBe('Trip to Kyoto');
+  });
 });
 
 // ---- Integration tests for maybeAutoName (real Postgres) ----
