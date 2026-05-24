@@ -41,7 +41,7 @@ export default function AppShell({ user, onSignOut, sidebar, topbar, children }:
       <aside className={`${styles.sidebar} ${navOpen ? styles.sidebarOpen : ''}`}>
         <div className={styles.brand}>
           <OliveMark className={styles.mark} />
-          <span className={styles.word}>Ollive</span>
+          <span className={styles.word}>Ollive AI Chat</span>
         </div>
 
         <button type="button" className={styles.newChat} onClick={() => { navigate('/'); setNavOpen(false); }}>

@@ -119,7 +119,7 @@ function GuestChat({ guestChat }: GuestChatProps) {
       <GuestBanner remaining={remaining} limit={limit} />
       {messages.length === 0 && !isStreaming ? (
         <ChatHero
-          title="Try Ollive for free"
+          title="Try Ollive AI Chat for free"
           subtitle="Send a message to start your free trial."
           onPickPrompt={(p) => composerRef.current?.fill(p)}
         />

@@ -1,6 +1,6 @@
 # @ollive/web
 
-Vite + React + TypeScript SPA for the Ollive chatbot frontend.
+Vite + React + TypeScript SPA for the Ollive AI chatbot frontend.
 
 ## Commands
 

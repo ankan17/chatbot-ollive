@@ -38,7 +38,7 @@ export default function SignInScreen({ onSignIn }: SignInScreenProps) {
         <div className={styles.mark}>
           <OliveMark />
         </div>
-        <h1 className={styles.title}>Ollive</h1>
+        <h1 className={styles.title}>Ollive AI Chat</h1>
         <p className={styles.tagline}>Chat with AI, with the observability to back it.</p>
         <button className={styles.button} onClick={handleSignIn} type="button">
           <GoogleGlyph />

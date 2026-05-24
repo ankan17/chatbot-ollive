@@ -111,7 +111,7 @@ describe('RequireAuth guard', () => {
       expect(screen.getByTestId('dashboard-content')).toBeTruthy();
     });
     // AppShell header should be present
-    expect(screen.getByText('Ollive')).toBeTruthy();
+    expect(screen.getByText('Ollive AI Chat')).toBeTruthy();
   });
 
   it('loading state shows spinner instead of redirect', () => {
