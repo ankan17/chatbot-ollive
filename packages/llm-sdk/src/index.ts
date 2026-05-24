@@ -14,6 +14,7 @@ export { PatternRedactor, NoopRedactor, LlmRedactor, createRedactor } from './re
 
 // Task 3: providers + registry
 export { GoogleProvider, googleProviderFactory } from './providers/google.js';
+export { AnthropicProvider, anthropicProviderFactory } from './providers/anthropic.js';
 export { ProviderRegistry } from './registry.js';
 export type { ProviderFactory } from './registry.js';
 
