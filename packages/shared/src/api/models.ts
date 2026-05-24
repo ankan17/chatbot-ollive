@@ -33,3 +33,13 @@ export const GOOGLE_MODELS: ModelInfo[] = [
     description: 'Most capable — best for hard problems',
   },
 ];
+
+/** Models the Anthropic provider can serve (selected via ChatRequest.model). */
+export const ANTHROPIC_MODELS: ModelInfo[] = [
+  {
+    id: 'claude-sonnet-4-6',
+    label: 'Claude Sonnet 4.6',
+    provider: 'anthropic',
+    description: 'Balanced — strong general reasoning',
+  },
+];
