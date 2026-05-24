@@ -47,6 +47,38 @@ describe('cleanTitle', () => {
   it('only quotes → "New conversation"', () => {
     expect(cleanTitle('""')).toBe('New conversation');
   });
+
+  it('strips bold markdown wrapping the whole title', () => {
+    expect(cleanTitle('**Capital of France**')).toBe('Capital of France');
+  });
+
+  it('strips single-asterisk italic markdown', () => {
+    expect(cleanTitle('*Trip to Kyoto*')).toBe('Trip to Kyoto');
+  });
+
+  it('strips a leading heading marker', () => {
+    expect(cleanTitle('## My Title')).toBe('My Title');
+  });
+
+  it('strips inline code backticks', () => {
+    expect(cleanTitle('`git rebase workflow`')).toBe('git rebase workflow');
+  });
+
+  it('strips strikethrough markdown', () => {
+    expect(cleanTitle('~~Old plan~~')).toBe('Old plan');
+  });
+
+  it('keeps only the text of a markdown link', () => {
+    expect(cleanTitle('[OpenAI docs](https://example.com)')).toBe('OpenAI docs');
+  });
+
+  it('strips bold and a trailing period together', () => {
+    expect(cleanTitle('**Capital of France.**')).toBe('Capital of France');
+  });
+
+  it('preserves snake_case identifiers (underscores are not emphasis)', () => {
+    expect(cleanTitle('Refactor user_service module')).toBe('Refactor user_service module');
+  });
 });
 
 // ---- Integration tests for maybeAutoName (real Postgres) ----

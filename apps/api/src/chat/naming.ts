@@ -7,8 +7,26 @@ import type { LLMProvider } from '@ollive/llm-sdk';
 const MAX_INPUT_CHARS = 500;
 
 /**
+ * Strip common markdown formatting a model may emit despite being asked not to.
+ * Titles render as plain text, so leftover markers (`**`, `#`, backticks…) would
+ * show up literally. Underscores are intentionally left alone to preserve
+ * snake_case identifiers in dev-topic titles.
+ */
+function stripMarkdown(s: string): string {
+  let out = s;
+  // Markdown links [text](url) → text
+  out = out.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // Leading block markers: headings (#), blockquotes (>), list bullets (-, *, +)
+  out = out.replace(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)/, '');
+  // Inline emphasis / code / strikethrough delimiters
+  out = out.replace(/\*{1,3}|`{1,3}|~~/g, '');
+  return out;
+}
+
+/**
  * Clean a raw model-generated title:
  * - Trim whitespace
+ * - Strip markdown formatting (bold/italic/code/headings/links)
  * - Strip surrounding single/double quotes
  * - Strip a trailing period
  * - Collapse internal whitespace
@@ -19,6 +37,8 @@ const MAX_INPUT_CHARS = 500;
  */
 export function cleanTitle(raw: string, maxWords = 6): string {
   let s = raw.trim();
+  // Strip markdown formatting (before quote/period stripping so combined cases resolve)
+  s = stripMarkdown(s);
   // Strip surrounding quotes (single or double)
   s = s.replace(/^["']|["']$/g, '');
   // Strip trailing period
@@ -49,7 +69,8 @@ export async function generateTitle(
     messages: [
       {
         role: 'system' as const,
-        content: 'Generate a concise title of at most 6 words; no quotes, no punctuation',
+        content:
+          'Generate a concise title of at most 6 words; plain text only, no markdown, no quotes, no punctuation',
       },
       {
         role: 'user' as const,
