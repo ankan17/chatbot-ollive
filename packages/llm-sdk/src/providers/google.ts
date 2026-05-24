@@ -1,45 +1,7 @@
 import { streamText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import type { ChatRequest, LLMProvider, StreamChunk, CallContext } from '../types.js';
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-interface AnyUsage {
-  inputTokens?: number | undefined;
-  outputTokens?: number | undefined;
-  promptTokens?: number | undefined;
-  completionTokens?: number | undefined;
-  totalTokens?: number | undefined;
-}
-
-/**
- * Normalizes provider/SDK-version token-usage differences.
- * ai@5.x uses inputTokens/outputTokens; ai@4.x used promptTokens/completionTokens.
- * Reads both spellings defensively; missing values coerce to 0.
- */
-function normalizeUsage(u: AnyUsage): { promptTokens: number; completionTokens: number; totalTokens: number } {
-  const promptTokens = u.inputTokens ?? u.promptTokens ?? 0;
-  const completionTokens = u.outputTokens ?? u.completionTokens ?? 0;
-  const totalTokens = u.totalTokens ?? (promptTokens + completionTokens);
-  return { promptTokens, completionTokens, totalTokens };
-}
-
-/**
- * Normalizes finish reasons from the provider into our StreamChunk union.
- */
-function normalizeFinishReason(r: string | undefined): StreamChunk['finishReason'] {
-  switch (r) {
-    case 'stop': return 'stop';
-    case 'length': return 'length';
-    case 'content-filter':
-    case 'content_filter': return 'content_filter';
-    case 'error': return 'error';
-    case 'cancelled': return 'cancelled';
-    default: return 'stop';
-  }
-}
+import { normalizeUsage, normalizeFinishReason } from './normalize.js';
 
 // ---------------------------------------------------------------------------
 // GoogleProvider — Vercel AI SDK adapter (ai@5.x + @ai-sdk/google@2.x)
