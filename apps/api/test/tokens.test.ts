@@ -102,6 +102,29 @@ describe('buildContext', () => {
     expect(resultWithReserve.messages.length).toBeLessThanOrEqual(resultNoReserve.messages.length);
   });
 
+  it('produces a provider-safe context after a failed turn (no empty turns, strict role alternation)', () => {
+    const history = [
+      msg('user', 'hello'),
+      msg('assistant', 'hi there'),
+      msg('user', 'follow up'),       // question whose response failed
+      msg('assistant', ''),           // failed response — empty turn, must be dropped
+      msg('user', 'next question'),
+    ];
+    const result = buildContext(history, 4000, 1024);
+
+    // No empty turns survive (empty parts make providers reject the request).
+    expect(result.messages.every((m) => m.content.trim().length > 0)).toBe(true);
+    // Roles strictly alternate (consecutive same-role turns are also rejected).
+    for (let i = 1; i < result.messages.length; i++) {
+      expect(result.messages[i].role).not.toBe(result.messages[i - 1].role);
+    }
+    // The orphaned user question is preserved (merged into the latest user turn).
+    const latest = result.messages[result.messages.length - 1];
+    expect(latest.role).toBe('user');
+    expect(latest.content).toContain('follow up');
+    expect(latest.content).toContain('next question');
+  });
+
   it('droppedCount correctly reflects trimmed count', () => {
     const history = [
       msg('user', 'a'.repeat(100)),  // 25 tokens
