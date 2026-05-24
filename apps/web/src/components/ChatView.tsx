@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useChat } from '../hooks/useChat.js';
 import { useGuestChat } from '../hooks/useGuestChat.js';
@@ -26,9 +26,11 @@ import styles from './ChatView.module.css';
 interface AuthedChatProps {
   conversationId: string | undefined;
   onTitle?: (d: SseTitleData) => void;
+  /** Bumped by the root when an import resolves without a route change, to re-trigger the composer pre-fill. */
+  draftSignal?: number;
 }
 
-function AuthedChat({ conversationId, onTitle }: AuthedChatProps) {
+function AuthedChat({ conversationId, onTitle, draftSignal }: AuthedChatProps) {
   const navigate = useNavigate();
   const { state, isStreaming, send, stop, reset } = useChat(
     conversationId ?? '',
@@ -71,16 +73,26 @@ function AuthedChat({ conversationId, onTitle }: AuthedChatProps) {
   // Pre-fill the composer with a message carried over from a capped guest import
   // (the message the user tried to send before signing in). Wait until history
   // has loaded so the composer is mounted.
+  // Pre-fill the composer with a message carried over from a capped guest import
+  // (the message the user tried to send before signing in). The draft is NOT
+  // removed here — it stays in sessionStorage until the user actually sends, so a
+  // remount (incl. React StrictMode's dev double-mount, or the post-import route
+  // change) re-fills a fresh composer instead of losing it. `draftFilledRef`
+  // keeps it to once per mount; `draftSignal` re-triggers it when no navigation
+  // happens (orphan-only: the only guest message was the capped one).
   useEffect(() => {
     if (conversationId && convStatus === 'loading') return;
     const draft = sessionStorage.getItem(IMPORT_DRAFT_KEY);
-    if (draft) {
-      sessionStorage.removeItem(IMPORT_DRAFT_KEY);
-      composerRef.current?.fill(draft);
-    }
-  }, [conversationId, convStatus]);
+    // fillIfEmpty (not fill) so a remount/StrictMode double-mount re-fills a fresh
+    // composer, but a composer the user has already typed into is left untouched.
+    // The draft stays in sessionStorage until send (see handleSend).
+    if (draft) composerRef.current?.fillIfEmpty(draft);
+  }, [conversationId, convStatus, draftSignal]);
 
   const handleSend = useCallback(async (content: string) => {
+    // The carried-over guest draft (if any) has now been acted on — drop it so a
+    // later remount doesn't re-fill it.
+    sessionStorage.removeItem(IMPORT_DRAFT_KEY);
     if (!conversationId) {
       // No conversation yet — create with the selected model, navigate, then send on mount
       const conv = await createConversation({ model: getStoredModel() });
@@ -168,6 +180,9 @@ export default function ChatView() {
   const importAttempted = useRef(false);
   const importOnLoginRef = useRef(guestChat.importOnLogin);
   importOnLoginRef.current = guestChat.importOnLogin;
+  // Bumped when an import resolves WITHOUT a route change (orphan-only / error),
+  // so the already-mounted AuthedChat re-runs its composer pre-fill.
+  const [draftSignal, setDraftSignal] = useState(0);
   useEffect(() => {
     if (!isAuthenticated || importAttempted.current) return;
     // The guest conversation was rehydrated into memory from the sign-in handoff
@@ -176,11 +191,12 @@ export default function ChatView() {
     importAttempted.current = true;
     importOnLoginRef.current().then((conv) => {
       // conv is null when the only guest message was a capped (unanswered) one —
-      // nothing to import, so land on a new chat; the composer pre-fill handles it.
-      navigate(conv ? `/c/${conv.id}` : '/');
+      // nothing to import, so stay on the new chat and signal the pre-fill.
+      if (conv) navigate(`/c/${conv.id}`);
+      else setDraftSignal((n) => n + 1);
     }).catch(() => {
-      // If import fails (e.g. idempotent duplicate), just navigate home
-      navigate('/');
+      // Import failed (e.g. idempotent duplicate) — stay put and still restore the draft.
+      setDraftSignal((n) => n + 1);
     });
   }, [isAuthenticated, navigate, guestChat.state]);
 
@@ -249,7 +265,7 @@ export default function ChatView() {
           Sign-in failed. Please try again.
         </div>
       )}
-      <AuthedChat conversationId={id} onTitle={handleTitle} />
+      <AuthedChat conversationId={id} onTitle={handleTitle} draftSignal={draftSignal} />
     </AppShell>
   );
 }

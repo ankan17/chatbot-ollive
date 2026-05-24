@@ -12,6 +12,8 @@ interface ComposerProps {
 export interface ComposerHandle {
   /** Fill the input with text and focus it (used by suggested prompts). */
   fill: (text: string) => void;
+  /** Fill+focus only when the input is currently empty (used to restore a carried-over draft without clobbering typed text). */
+  fillIfEmpty: (text: string) => void;
 }
 
 const MAX_HEIGHT = 200;
@@ -38,7 +40,15 @@ const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
         autosize();
       });
     },
-  }), []);
+    fillIfEmpty(text: string) {
+      if (value.trim() !== '') return;
+      setValue(text);
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        autosize();
+      });
+    },
+  }), [value]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
