@@ -4,7 +4,7 @@ import type { ConversationRepository } from '../conversations/repository.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { AppError } from '../errors.js';
-import { availableModelIds } from '../models/catalog.js';
+import { availableModelIds, providerForModel } from '../models/catalog.js';
 import {
   listConversationsQuerySchema,
   createConversationSchema,
@@ -36,7 +36,7 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
         userId,
         clientConversationId,
         messages,
-        provider: 'google',
+        provider: providerForModel(config.defaultModel, config) ?? 'google',
         model: config.defaultModel,
       });
 
@@ -76,11 +76,12 @@ export function conversationsRouter(deps: ConversationsRouterDeps): Router {
       }
       const userId = req.user!.id;
 
+      const resolvedModel = model ?? config.defaultModel;
       const conv = await conversations.create({
         userId,
         title,
-        provider: 'google',
-        model: model ?? config.defaultModel,
+        provider: providerForModel(resolvedModel, config) ?? 'google',
+        model: resolvedModel,
       });
 
       return res.status(201).json(conv);

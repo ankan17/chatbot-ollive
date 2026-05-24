@@ -23,9 +23,24 @@ const config = loadConfig({
   GEMINI_API_KEY: 'dummy-gemini-key-for-tests',
 });
 
+// Config with both Gemini and Anthropic keys so Anthropic models are available
+const configWithAnthropic = loadConfig({
+  DATABASE_URL,
+  REDIS_URL,
+  PORT: '4001',
+  INGESTION_API_KEY: 'test-key',
+  JWT_SECRET: 'test-jwt-secret-for-conv-tests',
+  AUTH_MODE: 'dev',
+  WEB_ORIGIN: 'http://localhost:5173',
+  NODE_ENV: 'test',
+  GEMINI_API_KEY: 'dummy-gemini-key-for-tests',
+  ANTHROPIC_API_KEY: 'dummy-anthropic-key-for-tests',
+});
+
 let db: ReturnType<typeof createDb>;
 let redis: InstanceType<typeof Redis>;
 let app: ReturnType<typeof createApp>;
+let appWithAnthropic: ReturnType<typeof createApp>;
 
 // Helper: create a session token for a user
 async function sessionCookieFor(userId: string, email: string, name?: string): Promise<string> {
@@ -38,6 +53,7 @@ beforeAll(async () => {
   db = createDb(DATABASE_URL);
   redis = new Redis(REDIS_URL, { maxRetriesPerRequest: null, db: 1 });
   app = createApp({ db, redis, config });
+  appWithAnthropic = createApp({ db, redis, config: configWithAnthropic });
 });
 
 afterAll(async () => {
@@ -103,6 +119,42 @@ describe('POST /v1/conversations', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.title).toBe('My Custom Title');
+  });
+
+  it('Gemini model → provider is google', async () => {
+    const userRepo = createUserRepository(db);
+    const user = await userRepo.upsertByGoogleSub({
+      googleSub: 'conv-provider-google-sub',
+      email: 'conv-provider-google@test.com',
+    });
+    const cookie = await sessionCookieFor(user.id, user.email);
+
+    const res = await request(app)
+      .post('/v1/conversations')
+      .set('Cookie', cookie)
+      .send({ model: 'gemini-2.5-flash' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.provider).toBe('google');
+    expect(res.body.model).toBe('gemini-2.5-flash');
+  });
+
+  it('Anthropic model → provider is anthropic', async () => {
+    const userRepo = createUserRepository(db);
+    const user = await userRepo.upsertByGoogleSub({
+      googleSub: 'conv-provider-anthropic-sub',
+      email: 'conv-provider-anthropic@test.com',
+    });
+    const cookie = await sessionCookieFor(user.id, user.email);
+
+    const res = await request(appWithAnthropic)
+      .post('/v1/conversations')
+      .set('Cookie', cookie)
+      .send({ model: 'claude-sonnet-4-6' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.provider).toBe('anthropic');
+    expect(res.body.model).toBe('claude-sonnet-4-6');
   });
 });
 
