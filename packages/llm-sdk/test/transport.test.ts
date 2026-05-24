@@ -70,6 +70,30 @@ describe('BufferedHttpTransport', () => {
     expect(server.received).toHaveLength(1);
   });
 
+  it('still drains after an initial empty flush (re-entrancy guard not permanently jammed)', async () => {
+    const server = await makeMockIngestionServer();
+
+    const transport = new BufferedHttpTransport({
+      ingestionUrl: server.url,
+      apiKey: 'key',
+      maxBufferSize: 100,
+      flushIntervalMs: 60_000, // keep the background timer out of the test
+      autoFlushOnFull: false,
+    });
+
+    // Mimic the first background-timer tick firing while the buffer is empty.
+    await transport.flush();
+
+    // A log arrives afterward — flushing must actually ship it.
+    transport.enqueue(baseLog);
+    await transport.flush();
+
+    await transport.close();
+    await server.close();
+
+    expect(server.received).toHaveLength(1);
+  });
+
   it('retry on 5xx then succeed: 2 failures + 1 success = 3 server requests for 1 log', async () => {
     const server = await makeMockIngestionServer({ failTimes: 2 });
 

@@ -93,17 +93,21 @@ export class BufferedHttpTransport implements LogSink {
    */
   flush(): Promise<void> {
     if (this.flushPromise !== null) return this.flushPromise;
-    this.flushPromise = (async () => {
-      try {
-        while (this.buffer.length > 0) {
-          const log = this.buffer.shift()!;
-          await this.shipWithRetry(log);
-        }
-      } finally {
-        this.flushPromise = null;
+    const p = (async () => {
+      while (this.buffer.length > 0) {
+        const log = this.buffer.shift()!;
+        await this.shipWithRetry(log);
       }
     })();
-    return this.flushPromise;
+    this.flushPromise = p;
+    // Clear via .finally so the reset always runs as a microtask AFTER the
+    // assignment above. Resetting inside the IIFE's finally would run
+    // synchronously when the buffer is empty and be clobbered by the assignment,
+    // permanently jamming the guard. Guard on identity so a later flush isn't cleared.
+    void p.finally(() => {
+      if (this.flushPromise === p) this.flushPromise = null;
+    });
+    return p;
   }
 
   /** Stops the background timer and performs a final flush. */
