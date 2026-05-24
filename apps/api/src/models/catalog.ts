@@ -1,4 +1,4 @@
-import { GOOGLE_MODELS, type ModelInfo } from '@ollive/shared/api';
+import { ANTHROPIC_MODELS, GOOGLE_MODELS, type ModelInfo } from '@ollive/shared/api';
 import type { AppConfig } from '../config.js';
 
 /**
@@ -11,10 +11,18 @@ export function availableModels(config: AppConfig): ModelInfo[] {
   if (config.geminiApiKey) {
     models.push(...GOOGLE_MODELS);
   }
+  if (config.anthropicApiKey) {
+    models.push(...ANTHROPIC_MODELS);
+  }
   return models;
 }
 
 /** Set of valid model ids for validating create/patch requests. */
 export function availableModelIds(config: AppConfig): Set<string> {
   return new Set(availableModels(config).map((m) => m.id));
+}
+
+/** Returns the provider name for a given model id, or undefined if not available. */
+export function providerForModel(model: string, config: AppConfig): string | undefined {
+  return availableModels(config).find((m) => m.id === model)?.provider;
 }

@@ -1,26 +1,70 @@
 import { describe, it, expect } from 'vitest';
-import { availableModels, availableModelIds } from '../src/models/catalog.js';
-import type { AppConfig } from '../src/config.js';
+import { loadConfig } from '../src/config.js';
+import { availableModels, availableModelIds, providerForModel } from '../src/models/catalog.js';
 
-function cfg(geminiApiKey: string): AppConfig {
-  return { geminiApiKey, defaultModel: 'gemini-2.5-flash' } as unknown as AppConfig;
-}
+const baseEnv = {
+  DATABASE_URL: 'postgres://ollive:ollive@localhost:5432/ollive',
+  REDIS_URL: 'redis://localhost:6379',
+  PORT: '4000',
+  INGESTION_API_KEY: 'test-key',
+  JWT_SECRET: 'test-jwt-secret',
+  AUTH_MODE: 'dev',
+  WEB_ORIGIN: 'http://localhost:5173',
+  NODE_ENV: 'test',
+  GEMINI_API_KEY: 'dummy-gemini-key',
+};
 
-describe('model catalog', () => {
-  it('exposes Gemini models when the key is configured', () => {
-    const models = availableModels(cfg('a-key'));
-    expect(models.length).toBeGreaterThanOrEqual(2);
-    expect(models.every((m) => m.provider === 'google')).toBe(true);
-    expect(models.map((m) => m.id)).toContain('gemini-2.5-flash');
+describe('availableModels — without ANTHROPIC_API_KEY', () => {
+  const cfg = loadConfig(baseEnv);
+
+  it('includes gemini-2.5-flash', () => {
+    const ids = availableModels(cfg).map((m) => m.id);
+    expect(ids).toContain('gemini-2.5-flash');
   });
 
-  it('returns no models when no provider key is set', () => {
-    expect(availableModels(cfg('')).length).toBe(0);
+  it('excludes claude-sonnet-4-6', () => {
+    const ids = availableModels(cfg).map((m) => m.id);
+    expect(ids).not.toContain('claude-sonnet-4-6');
+  });
+});
+
+describe('availableModelIds — without ANTHROPIC_API_KEY', () => {
+  const cfg = loadConfig(baseEnv);
+
+  it('excludes claude-sonnet-4-6', () => {
+    expect(availableModelIds(cfg).has('claude-sonnet-4-6')).toBe(false);
+  });
+});
+
+describe('providerForModel — without ANTHROPIC_API_KEY', () => {
+  const cfg = loadConfig(baseEnv);
+
+  it('returns undefined for claude-sonnet-4-6', () => {
+    expect(providerForModel('claude-sonnet-4-6', cfg)).toBeUndefined();
   });
 
-  it('availableModelIds is the set of model ids', () => {
-    const ids = availableModelIds(cfg('a-key'));
-    expect(ids.has('gemini-2.5-pro')).toBe(true);
-    expect(ids.has('gpt-4o')).toBe(false);
+  it('returns "google" for gemini-2.5-flash', () => {
+    expect(providerForModel('gemini-2.5-flash', cfg)).toBe('google');
+  });
+
+  it('returns undefined for a nonexistent model', () => {
+    expect(providerForModel('nonexistent-model', cfg)).toBeUndefined();
+  });
+});
+
+describe('availableModels — with ANTHROPIC_API_KEY', () => {
+  const cfg = loadConfig({ ...baseEnv, ANTHROPIC_API_KEY: 'dummy-anthropic-key' });
+
+  it('includes claude-sonnet-4-6', () => {
+    const ids = availableModels(cfg).map((m) => m.id);
+    expect(ids).toContain('claude-sonnet-4-6');
+  });
+});
+
+describe('providerForModel — with ANTHROPIC_API_KEY', () => {
+  const cfg = loadConfig({ ...baseEnv, ANTHROPIC_API_KEY: 'dummy-anthropic-key' });
+
+  it('returns "anthropic" for claude-sonnet-4-6', () => {
+    expect(providerForModel('claude-sonnet-4-6', cfg)).toBe('anthropic');
   });
 });
