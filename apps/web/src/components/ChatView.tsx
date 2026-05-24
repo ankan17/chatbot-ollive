@@ -7,7 +7,7 @@ import { useConversations } from '../hooks/useConversations.js';
 import { useConversation } from '../hooks/useConversation.js';
 import { useSession } from '../state/sessionContext.js';
 import { createConversation } from '../api/conversations.js';
-import { loadGuestState } from '../state/guestMachine.js';
+import { IMPORT_DRAFT_KEY } from '../state/guestMachine.js';
 import type { SseTitleData } from '../api/types.js';
 import MessageList from './MessageList.js';
 import Composer, { type ComposerHandle } from './Composer.js';
@@ -68,6 +68,18 @@ function AuthedChat({ conversationId, onTitle }: AuthedChatProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, convStatus]);
 
+  // Pre-fill the composer with a message carried over from a capped guest import
+  // (the message the user tried to send before signing in). Wait until history
+  // has loaded so the composer is mounted.
+  useEffect(() => {
+    if (conversationId && convStatus === 'loading') return;
+    const draft = sessionStorage.getItem(IMPORT_DRAFT_KEY);
+    if (draft) {
+      sessionStorage.removeItem(IMPORT_DRAFT_KEY);
+      composerRef.current?.fill(draft);
+    }
+  }, [conversationId, convStatus]);
+
   const handleSend = useCallback(async (content: string) => {
     if (!conversationId) {
       // No conversation yet — create with the selected model, navigate, then send on mount
@@ -110,13 +122,13 @@ interface GuestChatProps {
 }
 
 function GuestChat({ guestChat }: GuestChatProps) {
-  const { state, remaining, limit, isStreaming, isCapped, send, stop } = guestChat;
+  const { state, remaining, limit, isStreaming, isCapped, send, stop, beginSignIn } = guestChat;
   const messages = state.conversation.messages;
   const composerRef = useRef<ComposerHandle>(null);
 
   return (
     <>
-      <GuestBanner remaining={remaining} limit={limit} />
+      <GuestBanner remaining={remaining} limit={limit} onSignIn={beginSignIn} />
       {messages.length === 0 && !isStreaming ? (
         <ChatHero
           title="Try Ollive AI Chat for free"
@@ -131,7 +143,7 @@ function GuestChat({ guestChat }: GuestChatProps) {
         />
       )}
       {isCapped ? (
-        <GuestSignInPrompt />
+        <GuestSignInPrompt onSignIn={beginSignIn} />
       ) : (
         <Composer ref={composerRef} isStreaming={isStreaming} onSend={send} onStop={stop} />
       )}
@@ -158,16 +170,19 @@ export default function ChatView() {
   importOnLoginRef.current = guestChat.importOnLogin;
   useEffect(() => {
     if (!isAuthenticated || importAttempted.current) return;
-    const savedGuest = loadGuestState();
-    if (!savedGuest || savedGuest.conversation.messages.length === 0) return;
+    // The guest conversation was rehydrated into memory from the sign-in handoff
+    // buffer (if we just returned from sign-in). Import it if non-empty.
+    if (guestChat.state.conversation.messages.length === 0) return;
     importAttempted.current = true;
     importOnLoginRef.current().then((conv) => {
-      navigate(`/c/${conv.id}`);
+      // conv is null when the only guest message was a capped (unanswered) one —
+      // nothing to import, so land on a new chat; the composer pre-fill handles it.
+      navigate(conv ? `/c/${conv.id}` : '/');
     }).catch(() => {
       // If import fails (e.g. idempotent duplicate), just navigate home
       navigate('/');
     });
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, guestChat.state]);
 
   // FE11: the backend pushes a `title` event once the auto-generated title is
   // persisted (after the first response). Refresh the list then so the sidebar

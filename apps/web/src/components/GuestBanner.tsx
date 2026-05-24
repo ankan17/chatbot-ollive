@@ -1,13 +1,13 @@
 import React from 'react';
-import { googleSignInUrl } from '../api/session.js';
 import styles from './GuestBanner.module.css';
 
 interface GuestBannerProps {
   remaining: number;
   limit: number;
+  onSignIn: () => void;
 }
 
-export default function GuestBanner({ remaining }: GuestBannerProps) {
+export default function GuestBanner({ remaining, onSignIn }: GuestBannerProps) {
   const plural = remaining === 1 ? 'message' : 'messages';
 
   return (
@@ -21,7 +21,7 @@ export default function GuestBanner({ remaining }: GuestBannerProps) {
       </span>
       <button
         className={styles.signInLink}
-        onClick={() => window.location.assign(googleSignInUrl())}
+        onClick={onSignIn}
         type="button"
       >
         Sign in

@@ -6,6 +6,7 @@ import {
   saveGuestState,
   clearGuestState,
   toImportRequest,
+  splitForImport,
   GUEST_STORAGE_KEY,
 } from '../state/guestMachine.js';
 import type { GuestState } from '../state/guestMachine.js';
@@ -160,11 +161,19 @@ describe('guestReducer', () => {
   });
 });
 
-// ─── localStorage round-trip ──────────────────────────────────────────────────
+// ─── sessionStorage sign-in handoff buffer ────────────────────────────────────
+// The buffer survives the sign-in OAuth redirect (same tab) but NOT tab close,
+// and is written only at sign-in time — so a normal refresh never restores it.
 
-describe('localStorage round-trip', () => {
-  beforeEach(() => localStorage.clear());
-  afterEach(() => localStorage.clear());
+describe('sessionStorage sign-in handoff buffer', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+  afterEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+  });
 
   it('save then load deep-equals original state', () => {
     const state = createInitialGuestState();
@@ -182,8 +191,19 @@ describe('localStorage round-trip', () => {
     expect(loaded).toEqual(modded);
   });
 
+  it('saves to sessionStorage, not localStorage', () => {
+    saveGuestState(createInitialGuestState());
+    expect(sessionStorage.getItem(GUEST_STORAGE_KEY)).not.toBeNull();
+    expect(localStorage.getItem(GUEST_STORAGE_KEY)).toBeNull();
+  });
+
+  it('does not read a value left only in localStorage', () => {
+    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(createInitialGuestState()));
+    expect(loadGuestState()).toBeUndefined();
+  });
+
   it('corrupt JSON → undefined', () => {
-    localStorage.setItem(GUEST_STORAGE_KEY, '{not json}');
+    sessionStorage.setItem(GUEST_STORAGE_KEY, '{not json}');
     expect(loadGuestState()).toBeUndefined();
   });
 
@@ -195,7 +215,7 @@ describe('localStorage round-trip', () => {
     const state = createInitialGuestState();
     saveGuestState(state);
     clearGuestState();
-    expect(localStorage.getItem(GUEST_STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(GUEST_STORAGE_KEY)).toBeNull();
   });
 });
 
@@ -240,5 +260,46 @@ describe('toImportRequest', () => {
     const req = toImportRequest(conv);
     expect(req.messages).toHaveLength(1);
     expect(req.messages[0].role).toBe('user');
+  });
+});
+
+// ─── splitForImport (capped-orphan handling) ──────────────────────────────────
+
+describe('splitForImport', () => {
+  function conv(messages: ChatMessage[]) {
+    return { clientConversationId: 'c1', messages, createdAt: '2026-05-23T00:00:00.000Z' };
+  }
+
+  it('conversation ending in an assistant reply → imports all, no pending draft', () => {
+    const { request, pendingDraft } = splitForImport(
+      conv([makeUserMsg('u1', 'q1'), makeAssistantMsg('a1', 'r1')]),
+    );
+    expect(request.messages).toEqual([
+      { role: 'user', content: 'q1' },
+      { role: 'assistant', content: 'r1' },
+    ]);
+    expect(pendingDraft).toBeNull();
+  });
+
+  it('conversation ending in an unanswered user message → strips it, returns it as pending draft', () => {
+    const { request, pendingDraft } = splitForImport(
+      conv([makeUserMsg('u1', 'q1'), makeAssistantMsg('a1', 'r1'), makeUserMsg('u2', 'capped q')]),
+    );
+    expect(request.messages).toEqual([
+      { role: 'user', content: 'q1' },
+      { role: 'assistant', content: 'r1' },
+    ]);
+    expect(pendingDraft).toBe('capped q');
+  });
+
+  it('conversation with only an unanswered user message → empty import, draft set', () => {
+    const { request, pendingDraft } = splitForImport(conv([makeUserMsg('u1', 'only q')]));
+    expect(request.messages).toEqual([]);
+    expect(pendingDraft).toBe('only q');
+  });
+
+  it('preserves clientConversationId', () => {
+    const { request } = splitForImport(conv([makeUserMsg('u1', 'q1'), makeAssistantMsg('a1', 'r1')]));
+    expect(request.clientConversationId).toBe('c1');
   });
 });

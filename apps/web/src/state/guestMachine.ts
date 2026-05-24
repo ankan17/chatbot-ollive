@@ -157,13 +157,19 @@ export function createInitialGuestState(): GuestState {
   };
 }
 
-// ─── localStorage persistence ─────────────────────────────────────────────────
+// ─── Sign-in handoff buffer ───────────────────────────────────────────────────
+// Guest chat is NOT persisted during normal use — a plain refresh or tab close
+// starts fresh. The one exception is signing in, which is a full-page OAuth
+// redirect (window.location.assign) that destroys in-memory state. So the guest
+// conversation is buffered to `sessionStorage` only at sign-in time, read back
+// once on return, then cleared. `sessionStorage` survives the same-tab redirect
+// round-trip but not a tab close, reinforcing the no-persistence intent.
 
 export const GUEST_STORAGE_KEY = 'ollive.guest.v1';
 
 export function loadGuestState(): GuestState | undefined {
   try {
-    const raw = localStorage.getItem(GUEST_STORAGE_KEY);
+    const raw = sessionStorage.getItem(GUEST_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as GuestState;
     // Basic structural validation
@@ -184,14 +190,14 @@ export function loadGuestState(): GuestState | undefined {
 
 export function saveGuestState(state: GuestState): void {
   try {
-    localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(state));
+    sessionStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Swallow quota/serialization errors — a storage failure must not crash the caller
   }
 }
 
 export function clearGuestState(): void {
-  localStorage.removeItem(GUEST_STORAGE_KEY);
+  sessionStorage.removeItem(GUEST_STORAGE_KEY);
 }
 
 // ─── Import mapping ───────────────────────────────────────────────────────────
@@ -207,5 +213,31 @@ export function toImportRequest(c: GuestConversation): {
         m.role === 'user' || m.role === 'assistant',
       )
       .map((m) => ({ role: m.role, content: m.content })),
+  };
+}
+
+/** sessionStorage key for a message pre-filled into the composer after import. */
+export const IMPORT_DRAFT_KEY = 'ollive.importDraft.v1';
+
+/**
+ * Split a guest conversation for import-on-login.
+ *
+ * A conversation that ends with an unanswered user message means the guest hit
+ * the free cap before a reply streamed (the cap is enforced before generation,
+ * so the message was never processed). That message is excluded from the import
+ * and returned as `pendingDraft` — the caller pre-fills it into the composer so
+ * the now-authed user can send it. Any other conversation ends with an assistant
+ * message and imports unchanged.
+ */
+export function splitForImport(c: GuestConversation): {
+  request: { clientConversationId: string; messages: GuestMessageInput[] };
+  pendingDraft: string | null;
+} {
+  const last = c.messages[c.messages.length - 1];
+  const orphan = last?.role === 'user' ? last : null;
+  const messages = orphan ? c.messages.slice(0, -1) : c.messages;
+  return {
+    request: toImportRequest({ ...c, messages }),
+    pendingDraft: orphan ? orphan.content : null,
   };
 }

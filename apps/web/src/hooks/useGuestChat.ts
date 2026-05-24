@@ -5,11 +5,13 @@ import {
   loadGuestState,
   saveGuestState,
   clearGuestState,
-  toImportRequest,
+  splitForImport,
+  IMPORT_DRAFT_KEY,
 } from '../state/guestMachine.js';
 import type { GuestState } from '../state/guestMachine.js';
 import { streamChat } from '../api/stream.js';
 import { buildUrl } from '../api/config.js';
+import { googleSignInUrl } from '../api/session.js';
 import { importConversation } from '../api/conversations.js';
 import { ApiError } from '../api/errors.js';
 import { useSession } from '../state/sessionContext.js';
@@ -23,7 +25,8 @@ export interface UseGuestChatResult {
   isCapped: boolean;
   send: (content: string) => void;
   stop: () => void;
-  importOnLogin: () => Promise<ConversationWithMessages>;
+  beginSignIn: () => void;
+  importOnLogin: () => Promise<ConversationWithMessages | null>;
 }
 
 export function useGuestChat(): UseGuestChatResult {
@@ -37,13 +40,13 @@ export function useGuestChat(): UseGuestChatResult {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // Hydrate from localStorage on mount if a saved state exists
-  // (The initializer already handles this via useReducer's init function)
-
-  // Persist on every state change
+  // The initializer above rehydrates in-memory state from the sign-in handoff
+  // buffer when we've just returned from an OAuth redirect. Consume it once:
+  // clear the buffer on mount so a later plain refresh (or tab close) starts
+  // fresh — guest chat is never persisted during normal use.
   useEffect(() => {
-    saveGuestState(state);
-  }, [state]);
+    clearGuestState();
+  }, []);
 
   const send = useCallback(
     (content: string) => {
@@ -105,11 +108,23 @@ export function useGuestChat(): UseGuestChatResult {
     abortRef.current?.abort();
   }, []);
 
-  const importOnLogin = useCallback(async (): Promise<ConversationWithMessages> => {
-    const req = toImportRequest(state.conversation);
-    const result = await importConversation(req);
+  // Buffer the current guest conversation so it survives the full-page OAuth
+  // redirect, then navigate to Google sign-in. This is the only path that writes
+  // the handoff buffer — normal chatting never persists.
+  const beginSignIn = useCallback(() => {
+    saveGuestState(stateRef.current);
+    window.location.assign(googleSignInUrl());
+  }, []);
+
+  const importOnLogin = useCallback(async (): Promise<ConversationWithMessages | null> => {
+    const { request, pendingDraft } = splitForImport(state.conversation);
+    // A capped guest's unanswered message is excluded from the import and instead
+    // pre-filled into the composer so the now-authed user can send it.
+    if (pendingDraft) sessionStorage.setItem(IMPORT_DRAFT_KEY, pendingDraft);
     clearGuestState();
-    return result;
+    // Orphan-only conversation (the very first message was capped): nothing to import.
+    if (request.messages.length === 0) return null;
+    return importConversation(request);
   }, [state.conversation]);
 
   const isStreaming = state.phase === 'sending' || state.phase === 'streaming';
@@ -117,5 +132,5 @@ export function useGuestChat(): UseGuestChatResult {
   const remaining = Math.max(0, guest?.remaining ?? 0);
   const limit = guest?.limit ?? 0;
 
-  return { state, remaining, limit, isStreaming, isCapped, send, stop, importOnLogin };
+  return { state, remaining, limit, isStreaming, isCapped, send, stop, beginSignIn, importOnLogin };
 }

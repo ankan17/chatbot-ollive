@@ -1,8 +1,11 @@
 import React from 'react';
-import { googleSignInUrl } from '../api/session.js';
 import styles from './GuestSignInPrompt.module.css';
 
-export default function GuestSignInPrompt() {
+interface GuestSignInPromptProps {
+  onSignIn: () => void;
+}
+
+export default function GuestSignInPrompt({ onSignIn }: GuestSignInPromptProps) {
   return (
     <div className={styles.prompt}>
       <p className={styles.message}>
@@ -10,7 +13,7 @@ export default function GuestSignInPrompt() {
       </p>
       <button
         className={styles.button}
-        onClick={() => window.location.assign(googleSignInUrl())}
+        onClick={onSignIn}
         type="button"
       >
         Sign in with Google
